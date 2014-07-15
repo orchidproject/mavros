@@ -1,3 +1,4 @@
-bool     armed
-bool     guided		#true if MAV is in AUTO/RTL/LOITER/GUIDED/CIRCLE mode
-string   mode   	#control more
+# Base mode
+uint8 base_mode
+# Custom mode
+uint8 custom_mode

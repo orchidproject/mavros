@@ -50,8 +50,6 @@ find_package(catkin REQUIRED COMPONENTS
 add_message_files(
   FILES
   Attitude.msg
-  ControllerOutput.msg
-  Control.msg
   CurrentMission.msg
   FilteredPosition.msg
   Mavlink_RAW_IMU.msg
@@ -68,9 +66,7 @@ add_message_files(
 add_service_files(
   FILES
   APMCommand.srv
-  SendWaypoint.srv
   SendWaypointList.srv
-  XBEECommand.srv
 )
 
 ## Generate actions in the 'action' folder
