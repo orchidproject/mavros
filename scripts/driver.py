@@ -120,11 +120,12 @@ class MavRosProxy:
                                                       data.channel[3],
                                                       data.channel[4], data.channel[5], data.channel[6],
                                                       data.channel[7])
-        rospy.loginfo("Sending rc: %s" % data)
+        #rospy.loginfo("Sending rc: %s" % data)
 
     def command_cb(self, req):
+        #rospy.loginfo(CUSTOM_MODES[self.vehicle])
         start_time = rospy.Time.now().to_nsec()
-        if req.command == mavros.srv.APMCommand.CMD_TAKEOFF:
+        if req.command == mavros.srv._APMCommand.APMCommandRequest.CMD_TAKEOFF:
             if "LAND" not in CUSTOM_MODES[self.vehicle]:
                 rospy.loginfo("This vehicle can not fly.")
                 return False
@@ -134,12 +135,12 @@ class MavRosProxy:
             rospy.sleep(0.1)
             while self.custom_mode == CUSTOM_MODES[self.vehicle]["LAND"]:
                 if rospy.Time.now().to_nsec() - start_time > self.command_timeout * 1E6:
-                    rospy.loginfo("Timeout while trying to takeoff...")
+                    rospy.loginfo("Timeout while trying to takeoff..." + str(self.custom_mode))
                     return False
                 rospy.sleep(0.01)
             rospy.loginfo("Taken off")
             return True
-        elif req.command == mavros.srv.APMCommand.CMD_LAND:
+        elif req.command == mavros.srv._APMCommand.APMCommandRequest.CMD_LAND:
             if "LAND" not in CUSTOM_MODES[self.vehicle]:
                 rospy.loginfo("This vehicle can not fly.")
                 return False
@@ -149,52 +150,52 @@ class MavRosProxy:
             rospy.sleep(0.1)
             while self.custom_mode != CUSTOM_MODES[self.vehicle]["LAND"]:
                 if rospy.Time.now().to_nsec() - start_time > self.command_timeout * 1E6:
-                    rospy.loginfo("Timeout while trying to land...")
+                    rospy.loginfo("Timeout while trying to land..." + str(self.custom_mode))
                     return False
                 rospy.sleep(0.01)
             rospy.loginfo("Landed")
             return True
-        elif req.command == mavros.srv.APMCommand.CMD_MANUAL:
+        elif req.command == mavros.srv._APMCommand.APMCommandRequest.CMD_MANUAL:
             if "MANUAL" not in CUSTOM_MODES[self.vehicle]:
                 rospy.loginfo("This vehicle does not have manual.")
                 return False
             self.connection.mav.set_mode_send(self.connection.target_system,
-                                              mavutil.mavlink.MAV_MODE_FLAG_GUIDED_ENABLED,
-                                              CUSTOM_MODES[self.vehicle]["MAUNAL"])
+                                              mavutil.mavlink.MAV_MODE_FLAG_CUSTOM_MODE_ENABLED,
+                                              CUSTOM_MODES[self.vehicle]["MANUAL"])
             rospy.sleep(0.1)
-            while self.custom_mode != CUSTOM_MODES[self.vehicle]["MAUNAL"]:
+            while self.custom_mode != CUSTOM_MODES[self.vehicle]["MANUAL"]:
                 if rospy.Time.now().to_nsec() - start_time > self.command_timeout * 1E6:
                     rospy.loginfo("Timeout while going to MANUAL...")
                     return False
                 rospy.sleep(0.01)
-                rospy.loginfo("Switched to MANUAL")
+            rospy.loginfo("Switched to MANUAL")
             return True
-        elif req.command == mavros.srv.APMCommand.CMD_AUTO:
+        elif req.command == mavros.srv._APMCommand.APMCommandRequest.CMD_AUTO:
             if "AUTO" not in CUSTOM_MODES[self.vehicle]:
                 rospy.loginfo("This vehicle does not have auto.")
                 return False
             self.connection.mav.set_mode_send(self.connection.target_system,
-                                              mavutil.mavlink.MAV_MODE_FLAG_GUIDED_ENABLED,
+                                              mavutil.mavlink.MAV_MODE_FLAG_CUSTOM_MODE_ENABLED,
                                               CUSTOM_MODES[self.vehicle]["AUTO"])
             rospy.sleep(0.1)
             while self.custom_mode != CUSTOM_MODES[self.vehicle]["AUTO"]:
                 if rospy.Time.now().to_nsec() - start_time > self.command_timeout * 1E6:
-                    rospy.loginfo("Timeout while going to MANUAL...")
+                    rospy.loginfo("Timeout while going to AUTO...")
                     return False
                 rospy.sleep(0.01)
             rospy.loginfo("Switched to AUTO")
             return True
-        elif req.command == mavros.srv.APMCommand.CMD_BASE_MODE:
+        elif req.command == mavros.srv._APMCommand.APMCommandRequest.CMD_BASE_MODE:
             self.connection.mav.set_mode_send(self.connection.target_system,
                                               req.custom, 0)
             rospy.loginfo("Base mode(%s)..." % req.custom)
             return True
-        elif req.command == mavros.srv.APMCommand.CMD_MODE_CUSTOM_MODE_ENABLED:
+        elif req.command == mavros.srv._APMCommand.APMCommandRequest.CMD_CUSTOM_MODE:
             self.connection.mav.set_mode_send(self.connection.target_system,
                                               mavutil.mavlink.MAV_MODE_FLAG_GUIDED_ENABLED, req.custom)
             rospy.loginfo("Custom mode(%s)..." % req.custom)
             return True
-        elif req.command == mavros.srv.APMCommand.CMD_CLEAR_WAYPOINTS:
+        elif req.command == mavros.srv._APMCommand.APMCommandRequest.CMD_CLEAR_WAYPOINTS:
             self.connection.mav.mission_clear_all_send(self.connection.target_system,
                                                        self.connection.target_component)
             rospy.sleep(0.1)
@@ -317,6 +318,7 @@ class MavRosProxy:
         return True
 
     def start(self):
+        rospy.init_node("mavros")
         rospy.loginfo("Waiting for Heartbeat...")
         self.connection.wait_heartbeat()
         rospy.loginfo("Requesting parameters...")
@@ -340,6 +342,8 @@ class MavRosProxy:
 
                 elif msg_type == "HEARTBEAT":
                     self.pub_state.publish(msg.base_mode, msg.custom_mode)
+                    self.base_mode = msg.base_mode
+                    self.custom_mode = msg.custom_mode
 
                 elif msg_type == "VFR_HUD":
                     self.pub_vfr_hud.publish(msg.airspeed, msg.groundspeed, msg.heading, msg.throttle, msg.alt,
