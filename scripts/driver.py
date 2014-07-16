@@ -77,6 +77,7 @@ from tools import *
 UERE_CONSTANT = 45.5 / 9
 NE_CONSTANT = 1
 
+ADHOC_MANUAL = 99
 
 class MavRosProxy:
     def __init__(self, device, vehicle, baudrate, system, command_timeout=2000):
@@ -89,6 +90,7 @@ class MavRosProxy:
         self.connection = mavutil.mavlink_connection(self.device, self.baudrate)
         self.base_mode = None
         self.custom_mode = None
+        self.modes = None
         self.mission_ack = 0
         self.command_ack = 0
 
@@ -126,14 +128,17 @@ class MavRosProxy:
         #rospy.loginfo(CUSTOM_MODES[self.vehicle])
         start_time = rospy.Time.now().to_nsec()
         if req.command == mavros.srv._APMCommand.APMCommandRequest.CMD_TAKEOFF:
-            if "LAND" not in CUSTOM_MODES[self.vehicle]:
+            if "LAND" not in self.modes.keys():
                 rospy.loginfo("This vehicle can not fly.")
                 return False
+            if self.custom_mode != self.modes["LAND"]:
+                rospy.loginfo("Already in TAKEOFF")
+                return True
             self.connection.mav.command_long_send(self.connection.target_system,
                                                   0, mavutil.mavlink.MAV_CMD_NAV_TAKEOFF,
-                                                  1, 0, 0, 0, 0, 0, 0, 0)
+                                                  0, 0, 0, 0, 0, 0, 0, 0)
             rospy.sleep(0.1)
-            while self.custom_mode == CUSTOM_MODES[self.vehicle]["LAND"]:
+            while self.custom_mode == self.modes["LAND"]:
                 if rospy.Time.now().to_nsec() - start_time > self.command_timeout * 1E6:
                     rospy.loginfo("Timeout while trying to takeoff..." + str(self.custom_mode))
                     return False
@@ -141,14 +146,17 @@ class MavRosProxy:
             rospy.loginfo("Taken off")
             return True
         elif req.command == mavros.srv._APMCommand.APMCommandRequest.CMD_LAND:
-            if "LAND" not in CUSTOM_MODES[self.vehicle]:
+            if "LAND" not in self.modes.keys():
                 rospy.loginfo("This vehicle can not fly.")
                 return False
+            if self.custom_mode == self.modes["LAND"]:
+                rospy.loginfo("Already in LANDED")
+                return True
             self.connection.mav.command_long_send(self.connection.target_system,
                                                   0, mavutil.mavlink.MAV_CMD_NAV_LAND,
                                                   1, 0, 0, 0, 0, 0, 0, 0)
             rospy.sleep(0.1)
-            while self.custom_mode != CUSTOM_MODES[self.vehicle]["LAND"]:
+            while self.custom_mode != self.modes["LAND"]:
                 if rospy.Time.now().to_nsec() - start_time > self.command_timeout * 1E6:
                     rospy.loginfo("Timeout while trying to land..." + str(self.custom_mode))
                     return False
@@ -156,14 +164,19 @@ class MavRosProxy:
             rospy.loginfo("Landed")
             return True
         elif req.command == mavros.srv._APMCommand.APMCommandRequest.CMD_MANUAL:
-            if "MANUAL" not in CUSTOM_MODES[self.vehicle]:
-                rospy.loginfo("This vehicle does not have manual.")
-                return False
+            if "MANUAL" not in self.modes.keys():
+                rospy.loginfo("This vehicle might not support manual, sending " + str(ADHOC_MANUAL))
+                mode = ADHOC_MANUAL
+            else:
+                mode = self.modes["MANUAL"]
+            if self.custom_mode == mode:
+                rospy.loginfo("Already in MANUAL")
+                return True
             self.connection.mav.set_mode_send(self.connection.target_system,
                                               mavutil.mavlink.MAV_MODE_FLAG_CUSTOM_MODE_ENABLED,
-                                              CUSTOM_MODES[self.vehicle]["MANUAL"])
+                                              mode)
             rospy.sleep(0.1)
-            while self.custom_mode != CUSTOM_MODES[self.vehicle]["MANUAL"]:
+            while self.custom_mode != mode:
                 if rospy.Time.now().to_nsec() - start_time > self.command_timeout * 1E6:
                     rospy.loginfo("Timeout while going to MANUAL...")
                     return False
@@ -171,14 +184,18 @@ class MavRosProxy:
             rospy.loginfo("Switched to MANUAL")
             return True
         elif req.command == mavros.srv._APMCommand.APMCommandRequest.CMD_AUTO:
-            if "AUTO" not in CUSTOM_MODES[self.vehicle]:
-                rospy.loginfo("This vehicle does not have auto.")
-                return False
+            if "AUTO" not in self.modes.keys():
+                rospy.loginfo("This vehicle does not have auto. Sending mission start...")
+                self.connection.set_mode_auto()
+                return True
+            if self.custom_mode == self.modes["AUTO"]:
+                rospy.loginfo("Already in AUTO")
+                return True
             self.connection.mav.set_mode_send(self.connection.target_system,
                                               mavutil.mavlink.MAV_MODE_FLAG_CUSTOM_MODE_ENABLED,
-                                              CUSTOM_MODES[self.vehicle]["AUTO"])
+                                              self.modes["AUTO"])
             rospy.sleep(0.1)
-            while self.custom_mode != CUSTOM_MODES[self.vehicle]["AUTO"]:
+            while self.custom_mode != self.modes["AUTO"]:
                 if rospy.Time.now().to_nsec() - start_time > self.command_timeout * 1E6:
                     rospy.loginfo("Timeout while going to AUTO...")
                     return False
@@ -196,8 +213,7 @@ class MavRosProxy:
             rospy.loginfo("Custom mode(%s)..." % req.custom)
             return True
         elif req.command == mavros.srv._APMCommand.APMCommandRequest.CMD_CLEAR_WAYPOINTS:
-            self.connection.mav.mission_clear_all_send(self.connection.target_system,
-                                                       self.connection.target_component)
+            self.connection.waypoint_clear_all_send()
             rospy.sleep(0.1)
             while self.mission_ack < start_time:
                 if rospy.Time.now().to_nsec() - start_time > self.command_timeout * 1E6:
@@ -321,10 +337,9 @@ class MavRosProxy:
         rospy.init_node("mavros")
         rospy.loginfo("Waiting for Heartbeat...")
         self.connection.wait_heartbeat()
+        self.modes = self.connection.mode_mapping()
         rospy.loginfo("Requesting parameters...")
-        self.connection.mav.request_data_stream_send(self.connection.target_system,
-                                                     self.connection.target_component,
-                                                     mavutil.mavlink.MAV_DATA_STREAM_ALL, opts.mavlink_rate, 1)
+        self.connection.param_fetch_all()
         while not rospy.is_shutdown():
             msg = self.connection.recv_match(blocking=False)
             if not msg:
@@ -361,7 +376,7 @@ class MavRosProxy:
                     position_covariance[0] = UERE_CONSTANT * (msg.eph ** 2) + NE_CONSTANT ** 2
                     position_covariance[4] = UERE_CONSTANT * (msg.eph ** 2) + NE_CONSTANT ** 2
                     position_covariance[8] = UERE_CONSTANT * (msg.epv ** 2) + NE_CONSTANT ** 2
-
+                    #rospy.loginfo(str(msg.epv) + " " + str(msg.eph))
                     self.pub_gps.publish(NavSatFix(header=header,
                                                    latitude=msg.lat / 1e07,
                                                    longitude=msg.lon / 1e07,
