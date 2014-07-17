@@ -125,6 +125,7 @@ class MavRosProxy:
         #rospy.loginfo("Sending rc: %s" % data)
 
     def command_cb(self, req):
+        print self.connection.target_system        
         #rospy.loginfo(CUSTOM_MODES[self.vehicle])
         start_time = rospy.Time.now().to_nsec()
         if req.command == mavros.srv._APMCommand.APMCommandRequest.CMD_TAKEOFF:
@@ -134,9 +135,11 @@ class MavRosProxy:
             if self.custom_mode != self.modes["LAND"]:
                 rospy.loginfo("Already in TAKEOFF")
                 return True
+            
             self.connection.mav.command_long_send(self.connection.target_system,
                                                   0, mavutil.mavlink.MAV_CMD_NAV_TAKEOFF,
-                                                  0, 0, 0, 0, 0, 0, 0, 0)
+                                                  1, 0, 0, 0, 0, 0, 0, 0)
+                                                  
             rospy.sleep(0.1)
             while self.custom_mode == self.modes["LAND"]:
                 if rospy.Time.now().to_nsec() - start_time > self.command_timeout * 1E6:
@@ -356,6 +359,7 @@ class MavRosProxy:
                                          msg.chan7_raw, msg.chan8_raw])
 
                 elif msg_type == "HEARTBEAT":
+                    #print msg._msgbuf
                     self.pub_state.publish(msg.base_mode, msg.custom_mode)
                     self.base_mode = msg.base_mode
                     self.custom_mode = msg.custom_mode
