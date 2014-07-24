@@ -98,8 +98,8 @@ class MavRosProxy:
         # Global message containers
         # self.gps_msg = NavSatFix()
         # self.state_msg = mavros.msg.State()
-        # self.filtered_pos_msg = mavros.msg.FilteredPosition()
-        #self.current_mission_msg = mavros.msg.CurrentMission()
+        self.filtered_pos_msg = mavros.msg.FilteredPosition()
+        self.current_mission_msg = mavros.msg.CurrentMission()
         # Ros Topics and Services registration
         self.pub_gps = rospy.Publisher('gps', NavSatFix)
         self.pub_imu = rospy.Publisher('imu', Imu)
@@ -214,7 +214,7 @@ class MavRosProxy:
                 rospy.sleep(0.01)
             rospy.loginfo("Cleared waypoints")
             return True
-        elif req.command == mavros.srv._APMCommand.APMCommandRequest.HALT:
+        elif req.command == mavros.srv._APMCommand.APMCommandRequest.CMD_HALT:
             self.connection.mav.mission_item_send(self.connection.target_system, self.connection.target_component,
                                                   self.seq,
                                                   mavutil.mavlink.MAV_FRAME_GLOBAL_RELATIVE_ALT,
@@ -290,7 +290,7 @@ class MavRosProxy:
             elif msg_type == "HEARTBEAT":
                 self.pub_state.publish(msg.base_mode, msg.custom_mode)
                 self.custom_mode = msg.custom_mode
-                self.connection.waypoint_count_send()
+                self.connection.waypoint_request_list_send()
 
             elif msg_type == "VFR_HUD":
                 self.pub_vfr_hud.publish(msg.airspeed, msg.groundspeed, msg.heading, msg.throttle, msg.alt,
@@ -339,6 +339,9 @@ class MavRosProxy:
             elif msg_type == "GLOBAL_POSITION_INT":
                 header = Header()
                 header.stamp = rospy.Time.now()
+                self.latitude = msg.lat
+                self.longitude = msg.lon
+                self.altitude = msg.alt
                 self.filtered_pos_msg.header = header
                 self.filtered_pos_msg.latitude = msg.lat
                 self.filtered_pos_msg.longitude = msg.lon
@@ -389,7 +392,7 @@ class MavRosProxy:
                 rospy.loginfo(
                     "MISSION_REQUEST: Mission Request for target system %d for target component %d with result %d"
                     % (msg.target_system, msg.target_component, msg.seq))
-                self.mission_request_buffer.append(msg.seq)
+                #self.mission_request_buffer.append(msg.seq)
 
             elif msg_type == "STATUSTEXT":
                 rospy.loginfo("STATUSTEXT: Status severity is %d. Text Message is %s" % (msg.severity, msg.text))
