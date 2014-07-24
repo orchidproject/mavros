@@ -77,7 +77,6 @@ from tools import *
 UERE_CONSTANT = 45.5 / 9
 NE_CONSTANT = 1
 
-ADHOC_MANUAL = 99
 
 class MavRosProxy:
     def __init__(self, device, vehicle, baudrate, system, command_timeout=2000):
@@ -88,17 +87,20 @@ class MavRosProxy:
         self.system = system
         self.command_timeout = command_timeout
         self.connection = mavutil.mavlink_connection(self.device, self.baudrate)
-        self.base_mode = None
-        self.custom_mode = None
-        self.modes = None
         self.mission_ack = 0
         self.command_ack = 0
-
+        self.custom_mode = None
+        self.latitude = None
+        self.longitude = None
+        self.altitude = None
+        self.seq = 0
+        self.flying = False
         # Global message containers
-        self.gps_msg = NavSatFix()
-        self.state_msg = mavros.msg.State()
-        self.filtered_pos_msg = mavros.msg.FilteredPosition()
-        self.current_mission_msg = mavros.msg.CurrentMission()
+        # self.gps_msg = NavSatFix()
+        # self.state_msg = mavros.msg.State()
+        # self.filtered_pos_msg = mavros.msg.FilteredPosition()
+        #self.current_mission_msg = mavros.msg.CurrentMission()
+        # Ros Topics and Services registration
         self.pub_gps = rospy.Publisher('gps', NavSatFix)
         self.pub_imu = rospy.Publisher('imu', Imu)
         self.pub_rc = rospy.Publisher('rc', mavros.msg.RC)
@@ -108,7 +110,7 @@ class MavRosProxy:
         self.pub_raw_imu = rospy.Publisher('raw_imu', mavros.msg.Mavlink_RAW_IMU)
         self.pub_status = rospy.Publisher('status', mavros.msg.Status)
         self.pub_filtered_pos = rospy.Publisher('filtered_pos', mavros.msg.FilteredPosition)
-        self.pub_control_output = rospy.Publisher('controller_output', mavros.msg.ControllerOutput)
+        #self.pub_control_output = rospy.Publisher('controller_output', mavros.msg.ControllerOutput)
         self.pub_current_mission = rospy.Publisher('current_mission', mavros.msg.CurrentMission)
         self.pub_mission_item = rospy.Publisher('mission_item', mavros.msg.MissionItem)
         rospy.Subscriber("send_rc", mavros.msg.RC, self.send_rc_cb)
@@ -122,64 +124,48 @@ class MavRosProxy:
                                                       data.channel[3],
                                                       data.channel[4], data.channel[5], data.channel[6],
                                                       data.channel[7])
-        #rospy.loginfo("Sending rc: %s" % data)
 
     def command_cb(self, req):
-        print self.connection.target_system        
-        #rospy.loginfo(CUSTOM_MODES[self.vehicle])
         start_time = rospy.Time.now().to_nsec()
         if req.command == mavros.srv._APMCommand.APMCommandRequest.CMD_TAKEOFF:
-            if "LAND" not in self.modes.keys():
+            if "LAND" not in CUSTOM_MODES[self.vehicle]:
                 rospy.loginfo("This vehicle can not fly.")
                 return False
-            if self.custom_mode != self.modes["LAND"]:
-                rospy.loginfo("Already in TAKEOFF")
-                return True
-            
             self.connection.mav.command_long_send(self.connection.target_system,
                                                   0, mavutil.mavlink.MAV_CMD_NAV_TAKEOFF,
                                                   1, 0, 0, 0, 0, 0, 0, 0)
-                                                  
             rospy.sleep(0.1)
-            while self.custom_mode == self.modes["LAND"]:
+            while self.custom_mode == CUSTOM_MODES[self.vehicle]["LAND"]:
                 if rospy.Time.now().to_nsec() - start_time > self.command_timeout * 1E6:
-                    rospy.loginfo("Timeout while trying to takeoff..." + str(self.custom_mode))
+                    rospy.loginfo("Timeout while trying to takeoff...")
                     return False
                 rospy.sleep(0.01)
             rospy.loginfo("Taken off")
             return True
         elif req.command == mavros.srv._APMCommand.APMCommandRequest.CMD_LAND:
-            if "LAND" not in self.modes.keys():
+            if "LAND" not in CUSTOM_MODES[self.vehicle]:
                 rospy.loginfo("This vehicle can not fly.")
                 return False
-            if self.custom_mode == self.modes["LAND"]:
-                rospy.loginfo("Already in LANDED")
-                return True
             self.connection.mav.command_long_send(self.connection.target_system,
                                                   0, mavutil.mavlink.MAV_CMD_NAV_LAND,
                                                   1, 0, 0, 0, 0, 0, 0, 0)
             rospy.sleep(0.1)
-            while self.custom_mode != self.modes["LAND"]:
+            while self.custom_mode != CUSTOM_MODES[self.vehicle]["LAND"]:
                 if rospy.Time.now().to_nsec() - start_time > self.command_timeout * 1E6:
-                    rospy.loginfo("Timeout while trying to land..." + str(self.custom_mode))
+                    rospy.loginfo("Timeout while trying to land...")
                     return False
                 rospy.sleep(0.01)
             rospy.loginfo("Landed")
             return True
         elif req.command == mavros.srv._APMCommand.APMCommandRequest.CMD_MANUAL:
-            if "MANUAL" not in self.modes.keys():
-                rospy.loginfo("This vehicle might not support manual, sending " + str(ADHOC_MANUAL))
-                mode = ADHOC_MANUAL
-            else:
-                mode = self.modes["MANUAL"]
-            if self.custom_mode == mode:
-                rospy.loginfo("Already in MANUAL")
-                return True
+            if "MANUAL" not in CUSTOM_MODES[self.vehicle]:
+                rospy.loginfo("This vehicle does not have manual.")
+                return False
             self.connection.mav.set_mode_send(self.connection.target_system,
                                               mavutil.mavlink.MAV_MODE_FLAG_CUSTOM_MODE_ENABLED,
-                                              mode)
+                                              CUSTOM_MODES[self.vehicle]["MANUAL"])
             rospy.sleep(0.1)
-            while self.custom_mode != mode:
+            while self.custom_mode != CUSTOM_MODES[self.vehicle]["MANUAL"]:
                 if rospy.Time.now().to_nsec() - start_time > self.command_timeout * 1E6:
                     rospy.loginfo("Timeout while going to MANUAL...")
                     return False
@@ -187,20 +173,23 @@ class MavRosProxy:
             rospy.loginfo("Switched to MANUAL")
             return True
         elif req.command == mavros.srv._APMCommand.APMCommandRequest.CMD_AUTO:
-            if "AUTO" not in self.modes.keys():
-                rospy.loginfo("This vehicle does not have auto. Sending mission start...")
-                self.connection.set_mode_auto()
-                return True
-            if self.custom_mode == self.modes["AUTO"]:
-                rospy.loginfo("Already in AUTO")
-                return True
-            self.connection.mav.set_mode_send(self.connection.target_system,
-                                              mavutil.mavlink.MAV_MODE_FLAG_CUSTOM_MODE_ENABLED,
-                                              self.modes["AUTO"])
+            if "AUTO" not in CUSTOM_MODES[self.vehicle]:
+                rospy.loginfo("This vehicle does not have auto.")
+                return False
+            # self.connection.mav.set_mode_send(self.connection.target_system,
+            # mavutil.mavlink.MAV_MODE_FLAG_CUSTOM_MODE_ENABLED,
+            # CUSTOM_MODES[self.vehicle]["AUTO"])
+            # rospy.sleep(0.1)
+            # while self.custom_mode != CUSTOM_MODES[self.vehicle]["AUTO"]:
+            # if rospy.Time.now().to_nsec() - start_time > self.command_timeout * 1E6:
+            #         rospy.loginfo("Timeout while going to AUTO...")
+            #         return False
+            #     rospy.sleep(0.01)
+            self.connection.set_mode_auto()
             rospy.sleep(0.1)
-            while self.custom_mode != self.modes["AUTO"]:
+            while self.command_ack < start_time:
                 if rospy.Time.now().to_nsec() - start_time > self.command_timeout * 1E6:
-                    rospy.loginfo("Timeout while going to AUTO...")
+                    rospy.loginfo("Timeout while setting AUTO...")
                     return False
                 rospy.sleep(0.01)
             rospy.loginfo("Switched to AUTO")
@@ -225,253 +214,189 @@ class MavRosProxy:
                 rospy.sleep(0.01)
             rospy.loginfo("Cleared waypoints")
             return True
+        elif req.command == mavros.srv._APMCommand.APMCommandRequest.HALT:
+            self.connection.mav.mission_item_send(self.connection.target_system, self.connection.target_component,
+                                                  self.seq,
+                                                  mavutil.mavlink.MAV_FRAME_GLOBAL_RELATIVE_ALT,
+                                                  mavutil.mavlink.MAV_CMD_NAV_LOITER_UNLIM,
+                                                  1, 0,
+                                                  0, 0, 0, 0, self.latitude, self.longitude, self.altitude)
+            self.seq += 1
+            rospy.sleep(0.1)
+            while self.current_mission_msg.mission_num != self.seq - 1:
+                if rospy.Time.now().to_nsec() - start_time > self.command_timeout * 1E6:
+                    rospy.loginfo("Timeout while trying to halt...")
+                    return False
+                rospy.sleep(0.01)
+            rospy.loginfo("Halted")
+            return True
         return False
 
     def waypoint_list_cb(self, req):
-        sizeOfWaypointList = len(req.waypoints)
-        rospy.loginfo("Sending Waypoint list of " + str(sizeOfWaypointList) + " items")
-        self.connection.mav.mission_count_send(self.connection.target_system, self.connection.target_component,
-                                               sizeOfWaypointList + 1)
-
-        # Send Dummy Waypoint
-        dummy_wp = mavros.msg.Waypoint()
-        dummy_wp.latitude = self.gps_msg.latitude
-        dummy_wp.longitude = self.gps_msg.longitude
-        dummy_wp.waypoint_type = mavros.msg.Waypoint.TYPE_NAV
-
-        if not self.transmit_waypoint(dummy_wp, 0):
-            rospy.loginfo("Waypoint List Transmission Failed")
-            return False
-
-        # Send entire list of waypoints
-        for i in range(0, sizeOfWaypointList):
-            # Check and confirm altitude of each waypoint is greater than minimum altitude
-            # if using ArduCopter
-            if (req.waypoint[i].altitude < opts.minimum_mission_altitude):
-                rospy.loginfo("Waypoint Altitude below minimum allowable altitude")
-                return False
-
-            if (not self.transmit_waypoint(req.waypoints[i], i + 1)):
-                rospy.loginfo("Waypoint List Transmission Failed")
-                return False
-
-        # Set Current Waypoint
-        self.connection.mav.mission_set_current_send(self.connection.target_system, self.connection.target_component, 1)
-
-        # Send desired wp radius according to first waypoint of list
-        self.connection.mav.param_set_send(self.connection.target_system, self.connection.target_component,
-                                               "WPNAV_RADIUS",
-                                               req.waypoints[0].pos_acc / 10, mavutil.mavlink.MAV_PARAM_TYPE_REAL32)
-
-        rospy.loginfo("Waypoints Sent")
-        return True
-
-    def transmit_waypoint(self, data, index):
-        rospy.loginfo("Sending Waypoint " + str(index))
-
-        start_time = rospy.Time.from_sec(time.time()).to_nsec()
-
-        # Send the waypoint based on the type defined in the Waypoint.msg file
-        if (data.waypoint_type == mavros.msg.Waypoint.TYPE_NAV):
+        n = len(req.waypoints)
+        if not self.flying:
+            self.connection.mav.mission_count_send(self.connection.target_system, self.connection.target_component,
+                                                   n + 1)
             self.connection.mav.mission_item_send(self.connection.target_system, self.connection.target_component,
-                                                  index,  # Waypoint Number
-                                                  mavutil.mavlink.MAV_FRAME_GLOBAL_RELATIVE_ALT,  # Frame
-                                                  mavutil.mavlink.MAV_CMD_NAV_WAYPOINT,  # Mission Item Type
-                                                  0,  # Is Current Waypoint
-                                                  1,  # Should Autocontinue to next wp
-                                                  data.hold_time / 1000,  # Hold Time (convert from ms to seconds)
-                                                  0,  # Pos Acc Not used on APM
-                                                  0,  # Orbit Not used on APM
-                                                  0,  # Yaw Not used on APM
-                                                  data.latitude / 1E7,  # local: x position, global: latitude
-                                                  data.longitude / 1E7,  # local: y position, global: longitude
-                                                  data.altitude / 1000)  # local: z position, global: altitude (convert from mm to meters)
-        elif (data.waypoint_type == mavros.msg.Waypoint.TYPE_TAKEOFF):
-            self.connection.mav.mission_item_send(self.connection.target_system, self.connection.target_component,
-                                                  index,  # Waypoint Number
-                                                  0,
-                                                  mavutil.mavlink.MAV_CMD_NAV_TAKEOFF,  # Mission Item Type
-                                                  0,  # Is Current Waypoint
-                                                  1,  # Should Autocontinue to next wp
-                                                  0,
-                                                  # Min pitch (if airspeed sensor present), desired pitch without sensor
-                                                  0,  # Empty
-                                                  0,  # Empty
-                                                  0,
-                                                  # Yaw angle (if magnetometer present), ignored without magnetometer
-                                                  data.latitude / 1E7,  # latitude
-                                                  data.longitude / 1E7,  # longitude
-                                                  data.altitude / 1000)  # altitude
-        elif (data.waypoint_type == mavros.msg.Waypoint.TYPE_CONDITION_YAW):
-            self.connection.mav.mission_item_send(self.connection.target_system, self.connection.target_component,
-                                                  index,  # Waypoint Number
-                                                  0,
-                                                  mavutil.mavlink.MAV_CMD_CONDITION_YAW,  # Mission Item Type
-                                                  0,  # Is Current Waypoint
-                                                  1,  # Should Autocontinue to next wp
-                                                  data.yaw_from / 1000,  # Target angle:[0-360], 0 is north
-                                                  0,  # Speed During yaw change: [deg per second] (0 use default)
-                                                  0,
-                                                  # Direction: negative: counter clockwise, positive: clockwise [-1,1] (currently not used)
-                                                  0,  # Relative offset or absolute angle: [1,0]
-                                                  0,  # local: x position, global: latitude
-                                                  0,  # local: y position, global: longitude
-                                                  0)  # local: z position, global: altitude (convert from mm to meters)
-        elif (data.waypoint_type == mavros.msg.Waypoint.TYPE_CONDITION_CHANGE_ALT):
-            self.connection.mav.mission_item_send(self.connection.target_system, self.connection.target_component,
-                                                  index,  # Waypoint Number
-                                                  0,
-                                                  mavutil.mavlink.MAV_CMD_CONDITION_CHANGE_ALT,  # Mission Item Type
-                                                  0,  # Is Current Waypoint
-                                                  1,  # Should Autocontinue to next wp
-                                                  0,  # Descent / Ascend rate (m/s)
-                                                  0,  # Empty
-                                                  0,  # Empty
-                                                  0,  # Empty
-                                                  0,  # Empty
-                                                  0,  # Empty
-                                                  data.altitude / 1000)  # Finish Altitude (m)
+                                                  self.seq,
+                                                  mavutil.mavlink.MAV_FRAME_GLOBAL_RELATIVE_ALT,
+                                                  mavutil.mavlink.MAV_CMD_NAV_LOITER_UNLIM,
+                                                  1, 0,
+                                                  0, 0, 0, 0, self.latitude, self.longitude, self.altitude)
+            self.seq += 1
         else:
-            rospy.loginfo("Type of waypoint incorrect")
-            return False
+            self.connection.mav.mission_count_send(self.connection.target_system, self.connection.target_component,
+                                                   n)
+        # Send entire list of waypoints
+        for i in range(n):
+            if req.waypoints[i].waypoint_type == mavros.msg.Waypoint.TYPE_NAV:
+                mav_type = mavutil.mavlink.MAV_CMD_NAV_WAYPOINT
+            elif req.waypoints[i].waypoint_type == mavros.msg.Waypoint.TYPE_TAKEOFF:
+                mav_type = mavutil.mavlink.MAV_CMD_NAV_TAKEOFF
+            self.connection.mav.mission_item_send(self.connection.target_system, self.connection.target_component,
+                                                  self.seq,
+                                                  mavutil.mavlink.MAV_FRAME_GLOBAL_RELATIVE_ALT,
+                                                  mav_type,
+                                                  0, 1,
+                                                  0, 0, 0, 0, self.latitude, self.longitude, self.altitude)
+            self.seq += 1
+        if not self.flying:
+            self.connection.mav.mission_set_current_send(self.connection.target_system,
+                                                         self.connection.target_component, 1)
+        rospy.loginfo("Waypoints Sent")
         return True
 
     def start(self):
         rospy.init_node("mavros")
         rospy.loginfo("Waiting for Heartbeat...")
         self.connection.wait_heartbeat()
-        self.modes = self.connection.mode_mapping()
         rospy.loginfo("Requesting parameters...")
         self.connection.param_fetch_all()
         while not rospy.is_shutdown():
             msg = self.connection.recv_match(blocking=False)
             if not msg:
                 continue
-            if msg.get_type() == "BAD_DATA":
+            msg_type = msg.get_type()
+            if msg_type == "BAD_DATA":
                 if mavutil.all_printable(msg.data):
                     sys.stdout.write(msg.data)
                     sys.stdout.flush()
-            else:
-                msg_type = msg.get_type()
-                if msg_type == "RC_CHANNELS_RAW":
-                    self.pub_rc.publish([msg.chan1_raw, msg.chan2_raw, msg.chan3_raw,
-                                         msg.chan4_raw, msg.chan5_raw, msg.chan6_raw,
-                                         msg.chan7_raw, msg.chan8_raw])
 
-                elif msg_type == "HEARTBEAT":
-                    #print msg._msgbuf
-                    self.pub_state.publish(msg.base_mode, msg.custom_mode)
-                    self.base_mode = msg.base_mode
-                    self.custom_mode = msg.custom_mode
+            elif msg_type == "RC_CHANNELS_RAW":
+                self.pub_rc.publish([msg.chan1_raw, msg.chan2_raw, msg.chan3_raw,
+                                     msg.chan4_raw, msg.chan5_raw, msg.chan6_raw,
+                                     msg.chan7_raw, msg.chan8_raw])
 
-                elif msg_type == "VFR_HUD":
-                    self.pub_vfr_hud.publish(msg.airspeed, msg.groundspeed, msg.heading, msg.throttle, msg.alt,
-                                             msg.climb)
+            elif msg_type == "HEARTBEAT":
+                self.pub_state.publish(msg.base_mode, msg.custom_mode)
+                self.custom_mode = msg.custom_mode
+                self.connection.waypoint_count_send()
 
-                elif msg_type == "GPS_RAW_INT":
-                    fix = NavSatStatus.STATUS_NO_FIX
-                    if msg.fix_type >= 3:
-                        fix = NavSatStatus.STATUS_FIX
+            elif msg_type == "VFR_HUD":
+                self.pub_vfr_hud.publish(msg.airspeed, msg.groundspeed, msg.heading, msg.throttle, msg.alt,
+                                         msg.climb)
 
-                    header = Header()
-                    header.frame_id = 'base_link'
-                    header.stamp = rospy.Time.now()
-                    position_covariance = [0] * 9
-                    position_covariance[0] = UERE_CONSTANT * (msg.eph ** 2) + NE_CONSTANT ** 2
-                    position_covariance[4] = UERE_CONSTANT * (msg.eph ** 2) + NE_CONSTANT ** 2
-                    position_covariance[8] = UERE_CONSTANT * (msg.epv ** 2) + NE_CONSTANT ** 2
-                    #rospy.loginfo(str(msg.epv) + " " + str(msg.eph))
-                    self.pub_gps.publish(NavSatFix(header=header,
-                                                   latitude=msg.lat / 1e07,
-                                                   longitude=msg.lon / 1e07,
-                                                   altitude=msg.alt / 1e03,
-                                                   position_covariance=position_covariance,
-                                                   position_covariance_type=NavSatFix.COVARIANCE_TYPE_APPROXIMATED,
-                                                   status=NavSatStatus(status=fix, service=NavSatStatus.SERVICE_GPS)
-                    ))
+            elif msg_type == "GPS_RAW_INT":
+                fix = NavSatStatus.STATUS_NO_FIX
+                if msg.fix_type >= 3:
+                    fix = NavSatStatus.STATUS_FIX
 
-                    self.gps_msg.latitude = msg.lat
-                    self.gps_msg.longitude = msg.lon
+                header = Header()
+                header.frame_id = 'base_link'
+                header.stamp = rospy.Time.now()
+                position_covariance = [0] * 9
+                position_covariance[0] = UERE_CONSTANT * (msg.eph ** 2) + NE_CONSTANT ** 2
+                position_covariance[4] = UERE_CONSTANT * (msg.eph ** 2) + NE_CONSTANT ** 2
+                position_covariance[8] = UERE_CONSTANT * (msg.epv ** 2) + NE_CONSTANT ** 2
 
-                elif msg_type == "ATTITUDE":
-                    self.pub_attitude.publish(msg.roll, msg.pitch, msg.yaw, msg.rollspeed, msg.pitchspeed, msg.yawspeed)
+                self.pub_gps.publish(NavSatFix(header=header,
+                                               latitude=msg.lat / 1e07,
+                                               longitude=msg.lon / 1e07,
+                                               altitude=msg.alt / 1e03,
+                                               position_covariance=position_covariance,
+                                               position_covariance_type=NavSatFix.COVARIANCE_TYPE_APPROXIMATED,
+                                               status=NavSatStatus(status=fix, service=NavSatStatus.SERVICE_GPS)
+                ))
 
-                elif msg_type == "RAW_IMU":
-                    self.pub_raw_imu.publish(Header(), msg.time_usec,
-                                             msg.xacc, msg.yacc, msg.zacc,
-                                             msg.xgyro, msg.ygyro, msg.zgyro,
-                                             msg.xmag, msg.ymag, msg.zmag)
+            elif msg_type == "ATTITUDE":
+                self.pub_attitude.publish(msg.roll, msg.pitch, msg.yaw, msg.rollspeed, msg.pitchspeed, msg.yawspeed)
 
-                elif msg_type == "SYS_STATUS":
-                    status_msg = mavros.msg.Status()
-                    status_msg.header.stamp = rospy.Time.now()
-                    status_msg.battery_voltage = msg.voltage_battery
-                    status_msg.battery_current = msg.current_battery
-                    status_msg.battery_remaining = msg.battery_remaining
-                    status_msg.sensors_enabled = msg.onboard_control_sensors_enabled
-                    self.pub_status.publish(status_msg)
+            elif msg_type == "RAW_IMU":
+                self.pub_raw_imu.publish(Header(), msg.time_usec,
+                                         msg.xacc, msg.yacc, msg.zacc,
+                                         msg.xgyro, msg.ygyro, msg.zgyro,
+                                         msg.xmag, msg.ymag, msg.zmag)
 
-                elif msg_type == "GLOBAL_POSITION_INT":
-                    header = Header()
-                    header.stamp = rospy.Time.now()
-                    self.filtered_pos_msg.header = header
-                    self.filtered_pos_msg.latitude = msg.lat
-                    self.filtered_pos_msg.longitude = msg.lon
-                    self.filtered_pos_msg.altitude = msg.alt
-                    self.filtered_pos_msg.relative_altitude = msg.relative_alt
-                    self.filtered_pos_msg.ground_x_speed = msg.vx
-                    self.filtered_pos_msg.ground_y_speed = msg.vy
-                    self.filtered_pos_msg.ground_z_speed = msg.vz
-                    self.filtered_pos_msg.heading = msg.hdg
-                    self.pub_filtered_pos.publish(self.filtered_pos_msg)
+            elif msg_type == "SYS_STATUS":
+                status_msg = mavros.msg.Status()
+                status_msg.header.stamp = rospy.Time.now()
+                status_msg.battery_voltage = msg.voltage_battery
+                status_msg.battery_current = msg.current_battery
+                status_msg.battery_remaining = msg.battery_remaining
+                status_msg.sensors_enabled = msg.onboard_control_sensors_enabled
+                self.pub_status.publish(status_msg)
 
-                elif msg_type == "NAV_CONTROLLER_OUTPUT":
-                    self.current_mission_msg.header.stamp = rospy.Time.now()
-                    self.current_mission_msg.wp_dist = msg.wp_dist
-                    self.current_mission_msg.target_bearing = msg.target_bearing
+            elif msg_type == "GLOBAL_POSITION_INT":
+                header = Header()
+                header.stamp = rospy.Time.now()
+                self.filtered_pos_msg.header = header
+                self.filtered_pos_msg.latitude = msg.lat
+                self.filtered_pos_msg.longitude = msg.lon
+                self.filtered_pos_msg.altitude = msg.alt
+                self.filtered_pos_msg.relative_altitude = msg.relative_alt
+                self.filtered_pos_msg.ground_x_speed = msg.vx
+                self.filtered_pos_msg.ground_y_speed = msg.vy
+                self.filtered_pos_msg.ground_z_speed = msg.vz
+                self.filtered_pos_msg.heading = msg.hdg
+                self.pub_filtered_pos.publish(self.filtered_pos_msg)
 
-                    self.pub_current_mission.publish(self.current_mission_msg)
-                    self.pub_control_output.publish(msg.nav_roll, msg.nav_pitch,
-                                                    msg.nav_bearing, msg.alt_error,
-                                                    msg.aspd_error, msg.xtrack_error)
+            elif msg_type == "NAV_CONTROLLER_OUTPUT":
+                self.current_mission_msg.header.stamp = rospy.Time.now()
+                self.current_mission_msg.wp_dist = msg.wp_dist
+                self.current_mission_msg.target_bearing = msg.target_bearing
 
-                elif msg_type == "MISSION_CURRENT":
-                    self.current_mission_msg.header.stamp = rospy.Time.now()
-                    self.current_mission_msg.mission_num = msg.seq
-                    self.pub_current_mission.publish(self.current_mission_msg)
+                self.pub_current_mission.publish(self.current_mission_msg)
+                self.pub_control_output.publish(msg.nav_roll, msg.nav_pitch,
+                                                msg.nav_bearing, msg.alt_error,
+                                                msg.aspd_error, msg.xtrack_error)
 
-                elif msg_type == "MISSION_ITEM":
-                    header = Header()
-                    header.stamp = rospy.Time.now()
-                    self.pub_mission_item.publish(header, msg.seq, msg.current,
-                                                  msg.autocontinue, msg.param1,
-                                                  msg.param2, msg.param3, msg.param4,
-                                                  msg.x, msg.y, msg.z)
+            elif msg_type == "MISSION_CURRENT":
+                self.current_mission_msg.header.stamp = rospy.Time.now()
+                self.current_mission_msg.mission_num = msg.seq
+                self.pub_current_mission.publish(self.current_mission_msg)
 
-                elif msg_type == "MISSION_COUNT":
-                    rospy.loginfo("MISSION_COUNT: Number of Mission Items - " + str(msg.count))
+            elif msg_type == "MISSION_ITEM":
+                header = Header()
+                header.stamp = rospy.Time.now()
+                self.pub_mission_item.publish(header, msg.seq, msg.current,
+                                              msg.autocontinue, msg.param1,
+                                              msg.param2, msg.param3, msg.param4,
+                                              msg.x, msg.y, msg.z)
 
-                elif msg_type == "MISSION_ACK":
-                    if msg.type == mavutil.mavlink.MAV_MISSION_ACCEPTED:
-                        self.mission_ack = rospy.Time.now().to_nsec()
-                    rospy.loginfo("MISSION_ACK: Mission Message ACK with response - " + str(msg.type))
+            elif msg_type == "MISSION_COUNT":
+                rospy.loginfo("MISSION_COUNT: Number of Mission Items - " + str(msg.count))
 
-                elif msg_type == "COMMAND_ACK":
-                    self.command_ack = rospy.Time.now().to_nsec()
-                    rospy.loginfo("COMMAND_ACK: Command Message ACK with result - " + str(msg.result))
+            elif msg_type == "MISSION_ACK":
+                if msg.type == mavutil.mavlink.MAV_MISSION_ACCEPTED:
+                    self.mission_ack = rospy.Time.now().to_nsec()
+                rospy.loginfo("MISSION_ACK: Mission Message ACK with response - " + str(msg.type))
 
-                elif msg_type == "MISSION_REQUEST":
-                    rospy.loginfo(
-                        "MISSION_REQUEST: Mission Request for target system %d for target component %d with result %d"
-                        % (msg.target_system, msg.target_component, msg.seq))
-                    self.mission_request_buffer.append(msg.seq)
+            elif msg_type == "COMMAND_ACK":
+                self.command_ack = rospy.Time.now().to_nsec()
+                rospy.loginfo("COMMAND_ACK: Command Message ACK with result - " + str(msg.result))
 
-                elif msg_type == "STATUSTEXT":
-                    rospy.loginfo("STATUSTEXT: Status severity is %d. Text Message is %s" % (msg.severity, msg.text))
+            elif msg_type == "MISSION_REQUEST":
+                rospy.loginfo(
+                    "MISSION_REQUEST: Mission Request for target system %d for target component %d with result %d"
+                    % (msg.target_system, msg.target_component, msg.seq))
+                self.mission_request_buffer.append(msg.seq)
 
-                elif msg_type == "PARAM_VALUE":
-                    rospy.loginfo("PARAM_VALUE: ID = %s, Value = %d, Type = %d, Count = %d, Index = %d"
-                                  % (msg.param_id, msg.param_value, msg.param_type, msg.param_count, msg.param_index))
+            elif msg_type == "STATUSTEXT":
+                rospy.loginfo("STATUSTEXT: Status severity is %d. Text Message is %s" % (msg.severity, msg.text))
+
+            elif msg_type == "PARAM_VALUE":
+                rospy.loginfo("PARAM_VALUE: ID = %s, Value = %d, Type = %d, Count = %d, Index = %d"
+                              % (msg.param_id, msg.param_value, msg.param_type, msg.param_count, msg.param_index))
 
 
 if __name__ == '__main__':
