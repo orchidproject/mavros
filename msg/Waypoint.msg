@@ -25,6 +25,5 @@ int32 tilt_angle
 uint8 waypoint_type
 
 uint8 TYPE_NAV = 1
-uint8 TYPE_CONDITION_YAW = 2
-uint8 TYPE_CONDITION_CHANGE_ALT = 3
-uint8 TYPE_TAKEOFF = 4
+uint8 TYPE_TAKEOFF = 2
+uint8 TYPE_LAND = 3
