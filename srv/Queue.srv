@@ -1,14 +1,12 @@
 uint8 command
-Instruction instruction
----
-bool result
+Instruction[] instructions
 
 uint8 CMD_ADD = 1
 uint8 CMD_CLEAR = 2
 uint8 CMD_PAUSE = 3
 uint8 CMD_EXECUTE = 4
-
-uint8 TYPE_NONE = 0
-uint8 TYPE_LAND = 1
-uint8 TYPE_TAKEOFF = 2
-uint8 TYPE_GOTO = 3
+uint8 CMD_MANUAL = 5
+uint8 CMD_AUTO = 6
+uint8 CMD_SWITCH_CAMERA = 7
+---
+bool result

@@ -1,7 +1,7 @@
 <launch>
-  <node ns="apm" pkg="mavros" type="driver.py" name="mavros" output="screen" args="--device=udp:192.168.1.5:57812">
+  <node ns="apm" pkg="mavros" type="driver.py" name="mavros" output="screen" args="--device=udp:192.168.1.2:14550">
   </node>
-  <node ns="mosaic" pkg="mavros" type="rosnode.py" name="mosaic_node" output="screen" args="--prefix=/apm/">
+  <node ns="mosaic" pkg="mavros" type="mosaic_node.py" name="mosaic_node" output="screen" args="--prefix=/apm/">
   </node>
 </launch>
 

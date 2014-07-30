@@ -68,6 +68,7 @@ add_service_files(
   Command.srv
   Queue.srv
   SendWaypoints.srv
+  Parameters.srv
 )
 
 ## Generate actions in the 'action' folder
@@ -138,7 +139,7 @@ include_directories(
 ## in contrast to setup.py, you can choose the destination
 install(PROGRAMS
   scripts/driver.py
-  scripts/rosnode.py
+  scripts/mosaic_node.py
   DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION}
 )
 

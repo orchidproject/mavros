@@ -93,6 +93,7 @@ class MavRosProxy:
         self.modes = None
         self.mission_ack = 0
         self.command_ack = 0
+        self.param_req = False
 
         self.latitude = None
         self.longitude = None
@@ -105,21 +106,21 @@ class MavRosProxy:
         self.state_msg = mavros.msg.State()
         self.filtered_pos_msg = mavros.msg.FilteredPosition()
         self.current_mission_msg = mavros.msg.CurrentMission()
-        self.pub_gps = rospy.Publisher('gps', NavSatFix)
-        self.pub_imu = rospy.Publisher('imu', Imu)
-        self.pub_rc = rospy.Publisher('rc', mavros.msg.RC)
-        self.pub_state = rospy.Publisher('state', mavros.msg.State)
-        self.pub_vfr_hud = rospy.Publisher('vfr_hud', mavros.msg.VFR_HUD)
-        self.pub_attitude = rospy.Publisher('attitude', mavros.msg.Attitude)
-        self.pub_raw_imu = rospy.Publisher('raw_imu', mavros.msg.Mavlink_RAW_IMU)
-        self.pub_status = rospy.Publisher('status', mavros.msg.Status)
-        self.pub_filtered_pos = rospy.Publisher('filtered_pos', mavros.msg.FilteredPosition)
-        #self.pub_control_output = rospy.Publisher('controller_output', mavros.msg.ControllerOutput)
-        self.pub_current_mission = rospy.Publisher('current_mission', mavros.msg.CurrentMission)
-        self.pub_mission_item = rospy.Publisher('mission_item', mavros.msg.MissionItem)
+        self.pub_gps = rospy.Publisher('gps', NavSatFix, queue_size=10)
+        self.pub_imu = rospy.Publisher('imu', Imu, queue_size=10)
+        self.pub_rc = rospy.Publisher('rc', mavros.msg.RC, queue_size=10)
+        self.pub_state = rospy.Publisher('state', mavros.msg.State, queue_size=10)
+        self.pub_vfr_hud = rospy.Publisher('vfr_hud', mavros.msg.VFR_HUD, queue_size=10)
+        self.pub_attitude = rospy.Publisher('attitude', mavros.msg.Attitude, queue_size=10)
+        self.pub_raw_imu = rospy.Publisher('raw_imu', mavros.msg.Mavlink_RAW_IMU, queue_size=10)
+        self.pub_status = rospy.Publisher('status', mavros.msg.Status, queue_size=10)
+        self.pub_filtered_pos = rospy.Publisher('filtered_pos', mavros.msg.FilteredPosition, queue_size=10)
+        self.pub_current_mission = rospy.Publisher('current_mission', mavros.msg.CurrentMission, queue_size=10)
+        self.pub_mission_item = rospy.Publisher('mission_item', mavros.msg.MissionItem, queue_size=10)
         rospy.Subscriber("send_rc", mavros.msg.RC, self.send_rc_cb)
         rospy.Service("command", mavros.srv.Command, self.command_cb)
         rospy.Service("waypoints", mavros.srv.SendWaypoints, self.waypoint_list_cb)
+        rospy.Service("params", mavros.srv.Parameters, self.param_list_cb)
 
     def send_rc_cb(self, req):
         self.connection.mav.rc_channels_override_send(self.connection.target_system,
@@ -128,6 +129,26 @@ class MavRosProxy:
                                                       req.channel[3],
                                                       req.channel[4], req.channel[5], req.channel[6],
                                                       req.channel[7])
+
+    def param_list_cb(self, req):
+        if len(req.names) != len(req.values):
+            rospy.loginfo("Names and Values should be same size")
+            return [], []
+        for i in range(len(req.names)):
+            rospy.loginfo("REQUESTED: " + req.names[i] + " " + str(req.values[i]))
+            self.connection.param_set_send(req.names[i], req.values[i])
+        self.connection.param_fetch_complete = False
+        if len(req.names) == 1:
+            self.param_req = True
+            self.connection.param_fetch_one(req.names[0])
+        else:
+            self.connection.param_fetch_all()
+        while not self.connection.param_fetch_complete:
+            rospy.sleep(0.1)
+        if len(req.names) == 1:
+            return req.names, [self.connection.params[req.names[0]]]
+        else:
+            return self.connection.params.keys(), self.connection.params.values()
 
     def command_cb(self, req):
         print self.connection.target_system
@@ -272,9 +293,8 @@ class MavRosProxy:
         rospy.init_node("mavros")
         rospy.loginfo("Waiting for Heartbeat...")
         self.connection.wait_heartbeat()
+        rospy.loginfo("Connected!")
         self.modes = self.connection.mode_mapping()
-        rospy.loginfo("Requesting parameters...")
-        #self.connection.param_fetch_all()
         while not rospy.is_shutdown():
             msg = self.connection.recv_match(blocking=False)
             if not msg:
@@ -396,14 +416,14 @@ class MavRosProxy:
                 rospy.loginfo(
                     "MISSION_REQUEST: Mission Request for target system %d for target component %d with result %d"
                     % (msg.target_system, msg.target_component, msg.seq))
-                #self.mission_request_buffer.append(msg.seq)
 
             elif msg_type == "STATUSTEXT":
                 rospy.loginfo("STATUSTEXT: Status severity is %d. Text Message is %s" % (msg.severity, msg.text))
 
             elif msg_type == "PARAM_VALUE":
-                rospy.loginfo("PARAM_VALUE: ID = %s, Value = %d, Type = %d, Count = %d, Index = %d"
-                              % (msg.param_id, msg.param_value, msg.param_type, msg.param_count, msg.param_index))
+                if self.param_req:
+                    self.connection.param_fetch_complete = True
+                    self.param_req = False
 
 
 if __name__ == '__main__':
