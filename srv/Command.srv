@@ -6,6 +6,8 @@ uint8 CMD_LAND = 2
 uint8 CMD_MANUAL = 3
 uint8 CMD_AUTO = 4
 uint8 CMD_CLEAR_WAYPOINTS = 5
+uint8 CMD_HALT = 20
+uint8 CMD_RESUME = 21
 uint8 CMD_BASE_MODE = 10
 uint8 CMD_CUSTOM_MODE = 11
 

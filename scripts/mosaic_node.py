@@ -158,16 +158,12 @@ class ROSNode:
             if i.type != mavros.msg.Instruction.TYPE_GOTO:
                 break
             waypoint_msg = mavros.msg.Waypoint()
+            waypoint_msg.waypoint_type = mavros.msg.Waypoint.TYPE_NAV
+            waypoint_msg.autocontinue = 1
             waypoint_msg.latitude = i.latitude
             waypoint_msg.longitude = i.longitude
             waypoint_msg.altitude = i.altitude
-            waypoint_msg.pos_acc = i.range
-            waypoint_msg.speed_to = 100
-            waypoint_msg.hold_time = i.waitTime
-            waypoint_msg.yaw_from = 0
-            waypoint_msg.pan_angle = 0
-            waypoint_msg.tilt_angle = 0
-            waypoint_msg.waypoint_type = mavros.msg.Waypoint.TYPE_NAV
+            waypoint_msg.params = [i.waitTime, i.range, 0, 0]
             waypoints.append(waypoint_msg)
         return self.mav_wps(waypoints)
 

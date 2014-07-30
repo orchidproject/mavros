@@ -79,6 +79,7 @@ NE_CONSTANT = 1
 
 ADHOC_MANUAL = 99
 
+
 class MavRosProxy:
     def __init__(self, device, vehicle, baudrate, system, command_timeout=2000):
         self.connection = None
@@ -152,7 +153,7 @@ class MavRosProxy:
 
     def command_cb(self, req):
         print self.connection.target_system
-        #rospy.loginfo(CUSTOM_MODES[self.vehicle])
+        # rospy.loginfo(CUSTOM_MODES[self.vehicle])
         start_time = rospy.Time.now().to_nsec()
         if req.command == mavros.srv._Command.CommandRequest.CMD_TAKEOFF:
             if "LAND" not in self.modes.keys():
@@ -192,6 +193,21 @@ class MavRosProxy:
                 rospy.sleep(0.01)
             rospy.loginfo("Landed")
             return True
+        elif req.command == mavros.srv._Command.CommandRequest.CMD_HALT:
+            self.connection.mav.mission_item_send(self.connection.target_system, self.connection.target_component,
+                                                  self.seq,
+                                                  mavutil.mavlink.MAV_FRAME_GLOBAL_RELATIVE_ALT,
+                                                  mavutil.mavlink.MAV_CMD_OVERRIDE_GOTO,
+                                                  1, 0,
+                                                  mavutil.mavlink.MAV_GOTO_DO_HOLD,
+                                                  mavutil.mavlink.MAV_GOTO_HOLD_AT_CURRENT_POSITION,
+                                                  mavutil.mavlink.MAV_FRAME_GLOBAL_RELATIVE_ALT,
+                                                  0, self.latitude, self.longitude, self.altitude)
+            return True
+            self.seq += 1
+        elif req.command == mavros.srv._Command.CommandRequest.CMD_RESUME:
+            # TODO
+            pass
         elif req.command == mavros.srv._Command.CommandRequest.CMD_MANUAL:
             if "MANUAL" not in self.modes.keys():
                 rospy.loginfo("This vehicle might not support manual, sending " + str(ADHOC_MANUAL))
@@ -273,9 +289,11 @@ class MavRosProxy:
             self.connection.mav.mission_item_send(self.connection.target_system, self.connection.target_component,
                                                   self.seq + i,
                                                   mavutil.mavlink.MAV_FRAME_GLOBAL_RELATIVE_ALT,
-                                                  req.waypoints[i].waypoint_type,
-                                                  0, 1,
-                                                  0, 0, 0, 0, self.latitude, self.longitude, self.altitude)
+                                                  req.waypoints[i].waypoint_type, 0, req.waypoints[i].autocontinue,
+                                                  req.waypoints[i].params[0], req.waypoints[i].params[1],
+                                                  req.waypoints[i].params[2], req.waypoints[i].params[3],
+                                                  req.waypoints[i].latitude, req.waypoints[i].longitude,
+                                                  req.waypoints[i].altitude)
         self.connection.waypoint_request_list_send()
         rospy.sleep(0.1)
         while old + n < self.seq:
@@ -313,7 +331,7 @@ class MavRosProxy:
             elif msg_type == "HEARTBEAT":
                 self.pub_state.publish(msg.base_mode, msg.custom_mode)
                 self.custom_mode = msg.custom_mode
-                #self.connection.waypoint_request_list_send()
+                # self.connection.waypoint_request_list_send()
 
             elif msg_type == "VFR_HUD":
                 self.pub_vfr_hud.publish(msg.airspeed, msg.groundspeed, msg.heading, msg.throttle, msg.alt,

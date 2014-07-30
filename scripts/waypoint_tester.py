@@ -2,42 +2,36 @@
 import rospy
 import mavros.msg
 import mavros.srv
-import sys 
+import sys
 
 
 def publish_waypt():
     rospy.init_node('waypoint_tester')
-	
-    wayptListProxy = rospy.ServiceProxy('waypoint_list', mavros.srv.SendWaypointList)
+
+    wayptListProxy = rospy.ServiceProxy('waypoints', mavros.srv.SendWaypoints)
 
     while not rospy.is_shutdown():
-        wayptListMsg = mavros.msg.WaypointList()
-	# Starting position should be 50.930042,-1.407951
-	lat = [509297020, 509301280, 509302630, 509299370]
-	lon = [-14081360, -14083990, -14077010, -14074140]
+        wayptListMsg = list()
+        # Starting position should be 50.930042,-1.407951
+        lat = [50.9297020, 50.9301280, 50.9302630, 50.9299370]
+        lon = [-1.4081360, -1.4083990, -1.4077010, -1.4074140]
         # Populate waypoint list message
-        for i in range (0,5):
+        for i in range(0, 5):
             wayptMsg = mavros.msg.Waypoint()
-            wayptMsg.latitude = lat[i%4]
-            wayptMsg.longitude = lon[i%4]
-            wayptMsg.altitude = 5E3
-            wayptMsg.pos_acc = 10
-            wayptMsg.speed_to = 1E2
- 	    wayptMsg.hold_time = 0
-            wayptMsg.yaw_from = 0
-	    wayptMsg.pan_angle = 0
-	    wayptMsg.tilt_angle = 0
             wayptMsg.waypoint_type = mavros.msg.Waypoint.TYPE_NAV
-            wayptListMsg.waypoints.append(wayptMsg)
+            wayptMsg.autocontinue = 1
+            wayptMsg.latitude = lat[i % 4]
+            wayptMsg.longitude = lon[i % 4]
+            wayptMsg.params = mavros.msg.Waypoint.DEFAULT
+            wayptListMsg.append(wayptMsg)
         rospy.sleep(1.0)
-	req = mavros.srv.SendWaypointListRequest(wayptListMsg)
-        resp = wayptListProxy(waypoints=wayptListMsg.waypoints)
+        resp = wayptListProxy(wayptListMsg)
         print("Waypoints Sent. Response: " + str(resp.result))
-	sys.exit()
-        rospy.sleep(10.0)
+        sys.exit()
+
 
 if __name__ == '__main__':
     try:
         publish_waypt()
-    except  rospy.ROSInterruptException:
+    except rospy.ROSInterruptException:
         pass
