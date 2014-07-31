@@ -22,7 +22,7 @@ def publish_waypt():
             wayptMsg.autocontinue = 1
             wayptMsg.latitude = lat[i % 4]
             wayptMsg.longitude = lon[i % 4]
-            wayptMsg.params = mavros.msg.Waypoint.DEFAULT
+            wayptMsg.params = [0, 0, 0, 0]
             wayptListMsg.append(wayptMsg)
         rospy.sleep(1.0)
         resp = wayptListProxy(wayptListMsg)

@@ -60,6 +60,7 @@ add_message_files(
   Status.msg
   VFR_HUD.msg
   Waypoint.msg
+  Velocity.msg
 )
 
 ## Generate services in the 'srv' folder

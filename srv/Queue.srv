@@ -5,8 +5,12 @@ uint8 CMD_ADD = 1
 uint8 CMD_CLEAR = 2
 uint8 CMD_PAUSE = 3
 uint8 CMD_EXECUTE = 4
-uint8 CMD_MANUAL = 5
-uint8 CMD_AUTO = 6
-uint8 CMD_SWITCH_CAMERA = 7
+
+uint8 CMD_MANUAL = 11
+uint8 CMD_AUTO = 12
+uint8 CMD_MANUAL_TAKEOFF = 13
+uint8 CMD_MANUAL_LAND = 14
+
+uint8 CMD_SWITCH_CAMERA = 21
 ---
 bool result

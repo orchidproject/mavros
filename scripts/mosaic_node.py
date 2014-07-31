@@ -27,16 +27,20 @@ class ROSNode:
         self.empty_RC = mavros.msg.RC()
         for i in range(len(self.empty_RC.channel)):
             self.empty_RC.channel[i] = 1500
-        rospy.Subscriber("velocity", mavros.msg.RC, self.velocity_cb)
-        rospy.Service("queue", mavros.srv.Queue, self.queue_cb)
+        rospy.Subscriber("velocity", mavros.msg.Velocity, self.velocity_cb)
 
     def start(self):
         rospy.init_node("mosaic_node")
+        rospy.loginfo("Requesting parameters...")
         params = self.mav_params([], [])
+        rospy.Service("queue", mavros.srv.Queue, self.queue_cb)
+        rospy.loginfo("Parameters received, Queue is ready.")
         for i in range(len(params.names)):
             self.params[params.names[i]] = params.values[i]
         while not rospy.is_shutdown():
+            #print "SSSS: ", self.manual
             if self.manual:
+                #print "HHH: ", rospy.Time.now().to_sec(), " ", self.last_client
                 if rospy.Time.now().to_sec() - self.last_client > self.client_timeout:
                     rospy.loginfo("Client Timed Out! Trying to switch manual off.")
                     result = False
@@ -46,7 +50,7 @@ class ROSNode:
                         self.manual = False
                 elif rospy.Time.now().to_sec() - self.last_manual > 0.2:
                     self.last_manual = rospy.Time.now().to_sec()
-                    self.mav_rc(self.empty_RC)
+                    self.mav_rc.publish(self.empty_RC)
             elif self.execute and len(self.queue) > 0:
                 result = False
                 for i in range(self.timeouts):
@@ -85,22 +89,26 @@ class ROSNode:
                     self.state.publish("Waiting")
                 else:
                     self.state.publish("Paused")
-            rospy.sleep(0.5)
+            rospy.sleep(0.1)
 
     def velocity_cb(self, data):
-        for i in range(len(data.channel)):
-            data.channel[i] = (data.channel[i] + 1) * 1000
+        message = mavros.msg.RC()
+        for i in range(4):
+            message.channel[i] = data.velocity[i]*500 + 1500
+        for i in range(4, 8):
+            message.channel[i] = 1500
         self.last_manual = rospy.Time.now().to_sec()
-        self.mav_rc(data)
+        self.mav_rc.publish(message)
         self.last_client = self.last_manual
 
     def queue_cb(self, req):
+        # print req
         if req.command == mavros.srv._Queue.QueueRequest.CMD_ADD:
             for i in req.instructions:
                 self.queue.append(i)
             return True
         elif req.command == mavros.srv._Queue.QueueRequest.CMD_CLEAR:
-            if self.mav_cmd(5, 0):
+            if self.mav_cmd(5, 0).result:
                 self.queue = list()
                 self.send = False
                 return True
@@ -108,7 +116,7 @@ class ROSNode:
         elif req.command == mavros.srv._Queue.QueueRequest.CMD_PAUSE:
             if not self.execute:
                 return True
-            if self.mav_cmd(5, 0):
+            if self.mav_cmd(5, 0).result:
                 self.execute = False
                 self.send = False
                 return True
@@ -116,11 +124,12 @@ class ROSNode:
         elif req.command == mavros.srv._Queue.QueueRequest.CMD_EXECUTE:
             return self.transmit_waypoints()
         elif req.command == mavros.srv._Queue.QueueRequest.CMD_MANUAL:
+            self.last_client = rospy.Time.now().to_sec()
             if self.manual:
                 return True
             result = False
             for i in range(self.timeouts):
-                result = self.mav_cmd(3, 0)
+                result = self.mav_cmd(3, 0).result
                 if result:
                     break
             if result:
@@ -133,7 +142,7 @@ class ROSNode:
                 return True
             result = False
             for i in range(self.timeouts):
-                result = self.mav_cmd(4, 0)
+                result = self.mav_cmd(4, 0).result
                 if result:
                     break
             if result:
@@ -141,6 +150,24 @@ class ROSNode:
                 return True
             else:
                 return False
+        elif req.command == mavros.srv._Queue.QueueRequest.CMD_MANUAL_TAKEOFF:
+            if not self.manual:
+                return False
+            result = False
+            for i in range(self.timeouts):
+                result = self.mav_cmd(1, 0).result
+                if result:
+                    break
+            return result
+        elif req.command == mavros.srv._Queue.QueueRequest.CMD_MANUAL_LAND:
+            if not self.manual:
+                return False
+            result = False
+            for i in range(self.timeouts):
+                result = self.mav_cmd(2, 0).result
+                if result:
+                    break
+            return result
         elif req.command == mavros.srv._Queue.QueueRequest.CMD_SWITCH_CAMERA:
             if self.params[CAMERA_PARAMETER] > 0:
                 params = self.mav_params([CAMERA_PARAMETER], [0.0])
@@ -165,7 +192,7 @@ class ROSNode:
             waypoint_msg.altitude = i.altitude
             waypoint_msg.params = [i.waitTime, i.range, 0, 0]
             waypoints.append(waypoint_msg)
-        return self.mav_wps(waypoints)
+        return self.mav_wps(waypoints).result
 
 
 # *******************************************************************************
@@ -180,6 +207,11 @@ parser.add_option("--prefix", dest="prefix", default="/apm/",
 
 if __name__ == '__main__':
     try:
+        rospy.wait_for_service(opts.prefix + "command")
+        rospy.wait_for_service(opts.prefix + "waypoints")
+        rospy.wait_for_service(opts.prefix + "params")
+        # rospy.loginfo("Sleeping 10 seconds until mavros initialises")
+        #rospy.sleep(5)
         node = ROSNode(opts.prefix)
         node.start()
     except rospy.ROSInterruptException:

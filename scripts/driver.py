@@ -81,7 +81,7 @@ ADHOC_MANUAL = 99
 
 
 class MavRosProxy:
-    def __init__(self, device, vehicle, baudrate, system, command_timeout=2000):
+    def __init__(self, device, vehicle, baudrate, system, command_timeout=10000):
         self.connection = None
         self.device = device
         self.vehicle = vehicle
@@ -119,9 +119,6 @@ class MavRosProxy:
         self.pub_current_mission = rospy.Publisher('current_mission', mavros.msg.CurrentMission, queue_size=10)
         self.pub_mission_item = rospy.Publisher('mission_item', mavros.msg.MissionItem, queue_size=10)
         rospy.Subscriber("send_rc", mavros.msg.RC, self.send_rc_cb)
-        rospy.Service("command", mavros.srv.Command, self.command_cb)
-        rospy.Service("waypoints", mavros.srv.SendWaypoints, self.waypoint_list_cb)
-        rospy.Service("params", mavros.srv.Parameters, self.param_list_cb)
 
     def send_rc_cb(self, req):
         self.connection.mav.rc_channels_override_send(self.connection.target_system,
@@ -152,7 +149,7 @@ class MavRosProxy:
             return self.connection.params.keys(), self.connection.params.values()
 
     def command_cb(self, req):
-        print self.connection.target_system
+        # print self.connection.target_system
         # rospy.loginfo(CUSTOM_MODES[self.vehicle])
         start_time = rospy.Time.now().to_nsec()
         if req.command == mavros.srv._Command.CommandRequest.CMD_TAKEOFF:
@@ -203,8 +200,8 @@ class MavRosProxy:
                                                   mavutil.mavlink.MAV_GOTO_HOLD_AT_CURRENT_POSITION,
                                                   mavutil.mavlink.MAV_FRAME_GLOBAL_RELATIVE_ALT,
                                                   0, self.latitude, self.longitude, self.altitude)
-            return True
             self.seq += 1
+            return True
         elif req.command == mavros.srv._Command.CommandRequest.CMD_RESUME:
             # TODO
             pass
@@ -270,9 +267,11 @@ class MavRosProxy:
         return False
 
     def waypoint_list_cb(self, req):
+        print req
         n = len(req.waypoints)
         start_time = rospy.Time.now().to_nsec()
         old = self.seq
+        print "WPS: ",n
         if old == 0:
             self.connection.mav.mission_count_send(self.connection.target_system, self.connection.target_component,
                                                    n + 1)
@@ -311,7 +310,12 @@ class MavRosProxy:
         rospy.init_node("mavros")
         rospy.loginfo("Waiting for Heartbeat...")
         self.connection.wait_heartbeat()
+        rospy.loginfo("Sleeping for a second to initialise...")
+        rospy.sleep(1)
         rospy.loginfo("Connected!")
+        rospy.Service("command", mavros.srv.Command, self.command_cb)
+        rospy.Service("waypoints", mavros.srv.SendWaypoints, self.waypoint_list_cb)
+        rospy.Service("params", mavros.srv.Parameters, self.param_list_cb)
         self.modes = self.connection.mode_mapping()
         while not rospy.is_shutdown():
             msg = self.connection.recv_match(blocking=False)
@@ -331,7 +335,7 @@ class MavRosProxy:
             elif msg_type == "HEARTBEAT":
                 self.pub_state.publish(msg.base_mode, msg.custom_mode)
                 self.custom_mode = msg.custom_mode
-                # self.connection.waypoint_request_list_send()
+                self.connection.waypoint_request_list_send()
 
             elif msg_type == "VFR_HUD":
                 self.pub_vfr_hud.publish(msg.airspeed, msg.groundspeed, msg.heading, msg.throttle, msg.alt,

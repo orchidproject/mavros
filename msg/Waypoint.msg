@@ -11,4 +11,3 @@ float32[4] params
 uint8 TYPE_NAV = 1
 uint8 TYPE_TAKEOFF = 2
 uint8 TYPE_LAND = 3
-uint8[4] DEFAULT = [0, 0, 0, 0]
