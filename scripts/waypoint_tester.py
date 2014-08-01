@@ -19,6 +19,7 @@ def publish_waypoints(n):
         lat = [50.9297020, 50.9301280, 50.9302630, 50.9299370]
         lon = [-1.4081360, -1.4083990, -1.4077010, -1.4074140]
         instructions = list()
+
         i = mavros.msg.Instruction()
         i.type = mavros.msg.Instruction.TYPE_TAKEOFF
         instructions.append(i)
@@ -61,7 +62,6 @@ def publish_waypoints(n):
         i.longitude = lon[start]
         i.altitude = 3
         instructions.append(i)
-        start += inc
 
         i = mavros.msg.Instruction()
         i.type = mavros.msg.Instruction.TYPE_LAND
@@ -69,6 +69,9 @@ def publish_waypoints(n):
 
         resp = queue(1, instructions)
         print("Waypoints Sent. Response: " + str(resp.result))
+        rospy.sleep(1)
+        resp = queue(4, [])
+        print("Execute Response: " + str(resp.result))
         sys.exit()
 
 # *******************************************************************************

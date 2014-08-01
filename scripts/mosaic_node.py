@@ -127,7 +127,9 @@ class ROSNode:
                 return True
             return False
         elif req.command == mavros.srv._Queue.QueueRequest.CMD_EXECUTE:
-            return self.transmit_waypoints()
+            result = self.transmit_waypoints()
+            # self.execute = True
+            return result
         elif req.command == mavros.srv._Queue.QueueRequest.CMD_MANUAL:
             self.last_client = rospy.Time.now().to_sec()
             if self.manual:
@@ -197,7 +199,9 @@ class ROSNode:
             waypoint_msg.altitude = i.altitude
             waypoint_msg.params = [i.waitTime, i.range, 0, 0]
             waypoints.append(waypoint_msg)
-        return self.mav_wps(waypoints).result
+        if len(waypoints) > 0:
+            return self.mav_wps(waypoints).result
+        return True
 
 
 # *******************************************************************************
