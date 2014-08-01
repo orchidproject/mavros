@@ -149,8 +149,6 @@ class MavRosProxy:
             return self.connection.params.keys(), self.connection.params.values()
 
     def command_cb(self, req):
-        # print self.connection.target_system
-        # rospy.loginfo(CUSTOM_MODES[self.vehicle])
         start_time = rospy.Time.now().to_nsec()
         if req.command == mavros.srv._Command.CommandRequest.CMD_TAKEOFF:
             if "LAND" not in self.modes.keys():
@@ -191,19 +189,12 @@ class MavRosProxy:
             rospy.loginfo("Landed")
             return True
         elif req.command == mavros.srv._Command.CommandRequest.CMD_HALT:
-            self.connection.mav.mission_item_send(self.connection.target_system, self.connection.target_component,
-                                                  self.seq,
-                                                  mavutil.mavlink.MAV_FRAME_GLOBAL_RELATIVE_ALT,
-                                                  mavutil.mavlink.MAV_CMD_OVERRIDE_GOTO,
-                                                  1, 0,
-                                                  mavutil.mavlink.MAV_GOTO_DO_HOLD,
-                                                  mavutil.mavlink.MAV_GOTO_HOLD_AT_CURRENT_POSITION,
-                                                  mavutil.mavlink.MAV_FRAME_GLOBAL_RELATIVE_ALT,
-                                                  0, self.latitude, self.longitude, self.altitude)
-            self.seq += 1
+            self.connection.mav.mission_set_current_send(self.connection.target_system,
+                                                         self.connection.target_component, 0)
             return True
-        elif req.command == mavros.srv._Command.CommandRequest.CMD_RESUME:
-            # TODO
+        elif req.command == mavros.srv._Command.CommandRequest.CMD_GOTO:
+            self.connection.mav.mission_set_current_send(self.connection.target_system,
+                                                         self.connection.target_component, req.custom)
             pass
         elif req.command == mavros.srv._Command.CommandRequest.CMD_MANUAL:
             if "MANUAL" not in self.modes.keys():
@@ -278,9 +269,12 @@ class MavRosProxy:
             self.connection.mav.mission_item_send(self.connection.target_system, self.connection.target_component,
                                                   0,
                                                   mavutil.mavlink.MAV_FRAME_GLOBAL_RELATIVE_ALT,
-                                                  mavutil.mavlink.MAV_CMD_NAV_LOITER_UNLIM,
+                                                  mavutil.mavlink.MAV_CMD_OVERRIDE_GOTO,
                                                   1, 0,
-                                                  0, 0, 0, 0, self.latitude, self.longitude, self.altitude)
+                                                  mavutil.mavlink.MAV_GOTO_DO_HOLD,
+                                                  mavutil.mavlink.MAV_GOTO_HOLD_AT_CURRENT_POSITION,
+                                                  mavutil.mavlink.MAV_FRAME_GLOBAL_RELATIVE_ALT,
+                                                  0, self.latitude, self.longitude, self.altitude)
             self.seq = 1
 
         # Send entire list of waypoints
@@ -303,7 +297,7 @@ class MavRosProxy:
         if old == 0:
             self.connection.mav.mission_set_current_send(self.connection.target_system,
                                                          self.connection.target_component, 1)
-        rospy.loginfo("Waypoints Sent")
+        rospy.loginfo("Waypoints Sent: " + str(self.seq))
         return True
 
     def start(self):

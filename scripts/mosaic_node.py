@@ -38,9 +38,7 @@ class ROSNode:
         for i in range(len(params.names)):
             self.params[params.names[i]] = params.values[i]
         while not rospy.is_shutdown():
-            #print "SSSS: ", self.manual
             if self.manual:
-                #print "HHH: ", rospy.Time.now().to_sec(), " ", self.last_client
                 if rospy.Time.now().to_sec() - self.last_client > self.client_timeout:
                     rospy.loginfo("Client Timed Out! Trying to switch manual off.")
                     result = False
