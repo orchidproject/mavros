@@ -22,7 +22,7 @@ class ROSNode:
         self.mav_params = rospy.ServiceProxy(prefix + "params", mavros.srv.Parameters)
         self.mav_rc = rospy.Publisher(prefix + 'send_rc', mavros.msg.RC, queue_size=10)
         self.next = rospy.Publisher('next_instruction', mavros.msg.Instruction, queue_size=10)
-        self.state = rospy.Publisher('queue_state', String, queue_size=10)
+        self.state = rospy.Publisher('queue_state', mavros.msg.State, queue_size=10)
         self.params = dict()
         self.empty_RC = mavros.msg.RC()
         for i in range(len(self.empty_RC.channel)):
@@ -71,22 +71,29 @@ class ROSNode:
                     if not result:
                         rospy.loginfo("UNABLE TO TRANSMIT! PAUSING QUEUE...")
                         self.execute = False
+            next_instruction = mavros.msg.Instruction()
             if len(self.queue) > 0:
-                self.next.publish(self.queue[0])
                 if self.manual:
-                    self.state.publish("In Manual")
+                    state_base = -1
+                    #self.state.publish("In Manual")
                 elif self.execute:
-                    self.state.publish("Executing")
+                    state_base = 2
+                    #self.state.publish("Executing")
                 else:
-                    self.state.publish("Paused")
+                    state_base = 0
+                    #self.state.publish("Paused")
             else:
-                self.next.publish(0, 0, 0, 0, 0, 0)
                 if self.manual:
-                    self.state.publish("In Manual")
+                    state_base = -1
+                    #self.state.publish("In Manual")
                 elif self.execute:
-                    self.state.publish("Waiting")
+                    state_base = 1
+                    #self.state.publish("Waiting")
                 else:
-                    self.state.publish("Paused")
+                    state_base = 0
+                    #self.state.publish("Paused")
+            self.next.publish(next_instruction)
+            self.state.publish(state_base, len(self.queue))
             rospy.sleep(0.1)
 
     def velocity_cb(self, data):
@@ -199,7 +206,7 @@ class ROSNode:
 from optparse import OptionParser
 
 parser = OptionParser("mosaic_node.py [options]")
-parser.add_option("--prefix", dest="prefix", default="/apm/",
+parser.add_option("-p", "--prefix", dest="prefix", default="/apm/",
                   help="prefix of the mavros node")
 (opts, args) = parser.parse_args()
 
@@ -208,8 +215,6 @@ if __name__ == '__main__':
         rospy.wait_for_service(opts.prefix + "command")
         rospy.wait_for_service(opts.prefix + "waypoints")
         rospy.wait_for_service(opts.prefix + "params")
-        # rospy.loginfo("Sleeping 10 seconds until mavros initialises")
-        #rospy.sleep(5)
         node = ROSNode(opts.prefix)
         node.start()
     except rospy.ROSInterruptException:
