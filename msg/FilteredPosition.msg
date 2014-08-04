@@ -3,13 +3,11 @@
 
 Header header
 
-# Latitude and Longitude given in deg * 10^7
-int32 latitude
-int32 longitude
-
-# Altitude given as mm
-int32 altitude
-int32 relative_altitude
+# Latitude and Longitude, Altitude and Relative Altitude
+float64 latitude
+float64 longitude
+float64 altitude
+float64 relative_altitude
 
 # Ground Speed along X, Y, and Z expressed as m/s * 100
 int16 ground_x_speed

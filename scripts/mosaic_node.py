@@ -74,7 +74,7 @@ class ROSNode:
             next_instruction = mavros.msg.Instruction()
             if len(self.queue) > 0:
                 if self.manual:
-                    state_base = -1
+                    state_base = 3
                     #self.state.publish("In Manual")
                 elif self.execute:
                     state_base = 2
@@ -84,7 +84,7 @@ class ROSNode:
                     #self.state.publish("Paused")
             else:
                 if self.manual:
-                    state_base = -1
+                    state_base = 3
                     #self.state.publish("In Manual")
                 elif self.execute:
                     state_base = 1
