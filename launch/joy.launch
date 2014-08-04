@@ -1,0 +1,4 @@
+<launch>
+  <node pkg="joy" type="joy_node" name="joy_node" output="screen" />
+  <node pkg="mosaic_tester" type="flyByJoy_roscopter.py" name="flyByJoy_roscopter" output="screen" />
+</launch>

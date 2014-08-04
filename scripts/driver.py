@@ -40,9 +40,9 @@ parser.add_option("--enable-waypoint-control", dest="enable_waypoint_control",
 # Altitude Safety Parameters
 parser.add_option("--launch-altitude", dest="launch_altitude", default=3000,
                   type='int', help="default launch altitude in milli-meters")
-parser.add_option("--minimum-waypoint-altitude", dest="minimum_mission_altitude", default=3000,
+parser.add_option("--minimum-waypoint-altitude", dest="minimum_mission_altitude", default=1,
                   type='int', help="Minimum altitude waypoints must have to be accepted (milli-meters)")
-parser.add_option("--maximum-altitude", dest="maximum_altitude", default=50000,
+parser.add_option("--maximum-altitude", dest="maximum_altitude", default=10,
                   type='int', help="Maximum allowable altitude for vehicle to fly")
 
 # State and command Timeouts
@@ -81,7 +81,7 @@ ADHOC_MANUAL = 99
 
 
 class MavRosProxy:
-    def __init__(self, device, vehicle, baudrate, system, command_timeout=10000):
+    def __init__(self, device, vehicle, baudrate, system, command_timeout=10000, altitude_min=1, altitude_max=10):
         self.connection = None
         self.device = device
         self.vehicle = vehicle
@@ -102,6 +102,8 @@ class MavRosProxy:
         self.seq = 0
         self.flying = False
 
+        self.altitude_min = altitude_min
+        self.altitude_max = altitude_max
         # Global message containers
         self.gps_msg = NavSatFix()
         self.state_msg = mavros.msg.State()
@@ -189,8 +191,18 @@ class MavRosProxy:
             rospy.loginfo("Landed")
             return True
         elif req.command == mavros.srv._Command.CommandRequest.CMD_HALT:
-            self.connection.mav.mission_set_current_send(self.connection.target_system,
-                                                         self.connection.target_component, 0)
+            #self.connection.mav.mission_set_current_send(self.connection.target_system,
+            #                                             self.connection.target_component, 0)
+            self.connection.mav.mission_item_send(self.connection.target_system, self.connection.target_component,
+                                                  self.seq + 1,
+                                                  mavutil.mavlink.MAV_FRAME_GLOBAL_RELATIVE_ALT,
+                                                  mavutil.mavlink.MAV_CMD_OVERRIDE_GOTO,
+                                                  1, 0,
+                                                  mavutil.mavlink.MAV_GOTO_DO_HOLD,
+                                                  mavutil.mavlink.MAV_GOTO_HOLD_AT_CURRENT_POSITION,
+                                                  mavutil.mavlink.MAV_FRAME_GLOBAL_RELATIVE_ALT,
+                                                  0, self.latitude, self.longitude, self.altitude)
+            self.seq += 1
             return True
         elif req.command == mavros.srv._Command.CommandRequest.CMD_GOTO:
             self.connection.mav.mission_set_current_send(self.connection.target_system,
@@ -258,31 +270,44 @@ class MavRosProxy:
         return False
 
     def waypoint_list_cb(self, req):
-        print req
         n = len(req.waypoints)
         start_time = rospy.Time.now().to_nsec()
         old = self.seq
-        print "WPS: ",n
-        if old == 0:
+        if old == 0 and self.altitude_min <= self.altitude <= self.altitude_max:
             self.connection.mav.mission_count_send(self.connection.target_system, self.connection.target_component,
                                                    n + 1)
             self.connection.mav.mission_item_send(self.connection.target_system, self.connection.target_component,
                                                   0,
                                                   mavutil.mavlink.MAV_FRAME_GLOBAL_RELATIVE_ALT,
-                                                  mavutil.mavlink.MAV_CMD_OVERRIDE_GOTO,
+                                                  mavutil.mavlink.MAV_CMD_NAV_WAYPOINT,
                                                   1, 0,
-                                                  mavutil.mavlink.MAV_GOTO_DO_HOLD,
-                                                  mavutil.mavlink.MAV_GOTO_HOLD_AT_CURRENT_POSITION,
-                                                  mavutil.mavlink.MAV_FRAME_GLOBAL_RELATIVE_ALT,
-                                                  0, self.latitude, self.longitude, self.altitude)
+                                                  0, 0, 0, 0,
+                                                  self.latitude, self.longitude, self.altitude)
+            # self.connection.mav.mission_item_send(self.connection.target_system, self.connection.target_component,
+            #                                       0,
+            #                                       mavutil.mavlink.MAV_FRAME_GLOBAL_RELATIVE_ALT,
+            #                                       mavutil.mavlink.MAV_CMD_OVERRIDE_GOTO,
+            #                                       1, 0,
+            #                                       mavutil.mavlink.MAV_GOTO_DO_HOLD,
+            #                                       mavutil.mavlink.MAV_GOTO_HOLD_AT_CURRENT_POSITION,
+            #                                       mavutil.mavlink.MAV_FRAME_GLOBAL_RELATIVE_ALT,
+            #                                       0, self.latitude, self.longitude, self.altitude)
             self.seq = 1
 
         # Send entire list of waypoints
         for i in range(n):
+            if req.waypoints[i].type == mavros.msg.Waypoint.TYPE_NAV:
+                wp_type = mavutil.mavlink.MAV_CMD_NAV_WAYPOINT
+            elif req.waypoints[i].type == mavros.msg.Waypoint.TYPE_TAKEOFF:
+                wp_type = mavutil.mavlink.MAV_CMD_NAV_TAKEOFF
+            elif req.waypoints[i].type == mavros.msg.Waypoint.TYPE_LAND:
+                wp_type = mavutil.mavlink.MAV_CMD_NAV_LAND
+            else:
+                wp_type = req.waypoints[i].type
             self.connection.mav.mission_item_send(self.connection.target_system, self.connection.target_component,
                                                   self.seq + i,
                                                   mavutil.mavlink.MAV_FRAME_GLOBAL_RELATIVE_ALT,
-                                                  req.waypoints[i].waypoint_type, 0, req.waypoints[i].autocontinue,
+                                                  wp_type, 0, req.waypoints[i].autocontinue,
                                                   req.waypoints[i].params[0], req.waypoints[i].params[1],
                                                   req.waypoints[i].params[2], req.waypoints[i].params[3],
                                                   req.waypoints[i].latitude, req.waypoints[i].longitude,
@@ -294,9 +319,12 @@ class MavRosProxy:
                 rospy.loginfo("Timeout while sending waypoints...")
                 return False
             self.connection.waypoint_request_list_send()
-        if old == 0:
+        if old == 0 and self.altitude_min <= self.altitude <= self.altitude_max:
             self.connection.mav.mission_set_current_send(self.connection.target_system,
                                                          self.connection.target_component, 1)
+        elif old == 0:
+            self.connection.mav.mission_set_current_send(self.connection.target_system,
+                                                         self.connection.target_component, 0)
         rospy.loginfo("Waypoints Sent: " + str(self.seq))
         return True
 
@@ -329,7 +357,7 @@ class MavRosProxy:
             elif msg_type == "HEARTBEAT":
                 self.pub_state.publish(msg.base_mode, msg.custom_mode)
                 self.custom_mode = msg.custom_mode
-                self.connection.waypoint_request_list_send()
+                #self.connection.waypoint_request_list_send()
 
             elif msg_type == "VFR_HUD":
                 self.pub_vfr_hud.publish(msg.airspeed, msg.groundspeed, msg.heading, msg.throttle, msg.alt,
@@ -378,14 +406,14 @@ class MavRosProxy:
             elif msg_type == "GLOBAL_POSITION_INT":
                 header = Header()
                 header.stamp = rospy.Time.now()
-                self.latitude = msg.lat
-                self.longitude = msg.lon
-                self.altitude = msg.alt
+                self.latitude = msg.lat / 1E7
+                self.longitude = msg.lon / 1E7
+                self.altitude = msg.relative_alt / 1E3
                 self.filtered_pos_msg.header = header
-                self.filtered_pos_msg.latitude = msg.lat
-                self.filtered_pos_msg.longitude = msg.lon
-                self.filtered_pos_msg.altitude = msg.alt
-                self.filtered_pos_msg.relative_altitude = msg.relative_alt
+                self.filtered_pos_msg.latitude = msg.lat / 1E7
+                self.filtered_pos_msg.longitude = msg.lon / 1E7
+                self.filtered_pos_msg.altitude = msg.alt / 1E3
+                self.filtered_pos_msg.relative_altitude = msg.relative_alt / 1E3
                 self.filtered_pos_msg.ground_x_speed = msg.vx
                 self.filtered_pos_msg.ground_y_speed = msg.vy
                 self.filtered_pos_msg.ground_z_speed = msg.vz

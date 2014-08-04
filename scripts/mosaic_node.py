@@ -187,12 +187,13 @@ class ROSNode:
                 return False
 
     def transmit_waypoints(self):
+        print "SSSS", self.queue
         waypoints = list()
         for i in self.queue:
             if i.type != mavros.msg.Instruction.TYPE_GOTO:
                 break
             waypoint_msg = mavros.msg.Waypoint()
-            waypoint_msg.waypoint_type = mavros.msg.Waypoint.TYPE_NAV
+            waypoint_msg.type = mavros.msg.Waypoint.TYPE_NAV
             waypoint_msg.autocontinue = 1
             waypoint_msg.latitude = i.latitude
             waypoint_msg.longitude = i.longitude

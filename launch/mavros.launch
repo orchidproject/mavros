@@ -1,8 +1,18 @@
 <launch>
-  <node ns="apm" pkg="mavros" type="driver.py" name="mavros" output="screen" args="--device=udp:192.168.1.3:14550">
+  <node pkg="ar2mav" type="arproxy.py" name="arproxy" respawn="false" output="screen" args="-f $(find ar2mav)/map.csv -v 1 -l 192.168.1.3" />
+  <node ns="apm" pkg="mavros" type="driver.py" name="mavros" output="screen" args="--device=udp:192.168.1.3:57812">
   </node>
-  <node ns="mosaic" pkg="mavros" type="mosaic_node.py" name="mosaic_node" output="screen" args="--prefix=/apm/">
-  </node>
+  <node ns="mosaic" pkg="mavros" type="mosaic_node.py" name="mosaic_node" output="screen" />
+  <node pkg="joy" type="joy_node" name="joy_node" output="screen" />
+  <node pkg="mosaic_tester" type="flyByJoy_roscopter.py" name="flyByJoy_roscopter" output="screen" />
+  <node pkg="ar2mav" type="drone_video" name="drone_video" respawn="false" output="screen">
+	<param name="drone_ip" value="192.168.1.1" />
+	<param name="drone_port" value="5555" />
+	<param name="buffer_size" value="40000" />
+	<param name="timeout" value="1" />
+	<param name="topic_name" value="/image/x264" />
+   </node>
+   <node pkg="image_view" type="image_view" name="viewer" args="image:=/image x264"/>
 </launch>
 
 

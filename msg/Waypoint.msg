@@ -1,4 +1,4 @@
-uint8 waypoint_type
+uint8 type
 uint8 autocontinue
 
 float32 latitude

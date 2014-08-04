@@ -5,7 +5,7 @@ import mavros.srv
 import sys
 
 
-def publish_waypoints(n):
+def publish_waypoints(n, inst):
     if n == 1:
         start = 0
         inc = 1
@@ -20,9 +20,10 @@ def publish_waypoints(n):
         lon = [-1.4081360, -1.4083990, -1.4077010, -1.4074140]
         instructions = list()
 
-        i = mavros.msg.Instruction()
-        i.type = mavros.msg.Instruction.TYPE_TAKEOFF
-        instructions.append(i)
+        if inst:
+            i = mavros.msg.Instruction()
+            i.type = mavros.msg.Instruction.TYPE_TAKEOFF
+            instructions.append(i)
 
         i = mavros.msg.Instruction()
         i.type = mavros.msg.Instruction.TYPE_GOTO
@@ -40,13 +41,14 @@ def publish_waypoints(n):
         instructions.append(i)
         start += inc
 
-        i = mavros.msg.Instruction()
-        i.type = mavros.msg.Instruction.TYPE_LAND
-        instructions.append(i)
+        if inst:
+            i = mavros.msg.Instruction()
+            i.type = mavros.msg.Instruction.TYPE_LAND
+            instructions.append(i)
 
-        i = mavros.msg.Instruction()
-        i.type = mavros.msg.Instruction.TYPE_TAKEOFF
-        instructions.append(i)
+            i = mavros.msg.Instruction()
+            i.type = mavros.msg.Instruction.TYPE_TAKEOFF
+            instructions.append(i)
 
         i = mavros.msg.Instruction()
         i.type = mavros.msg.Instruction.TYPE_GOTO
@@ -63,9 +65,10 @@ def publish_waypoints(n):
         i.altitude = 3
         instructions.append(i)
 
-        i = mavros.msg.Instruction()
-        i.type = mavros.msg.Instruction.TYPE_LAND
-        instructions.append(i)
+        if inst:
+            i = mavros.msg.Instruction()
+            i.type = mavros.msg.Instruction.TYPE_LAND
+            instructions.append(i)
 
         resp = queue(1, instructions)
         print("Waypoints Sent. Response: " + str(resp.result))
@@ -82,10 +85,12 @@ from optparse import OptionParser
 parser = OptionParser("mosaic_node.py [options]")
 parser.add_option("-n", "--number", dest="n", default=1,
                   help="Number of drone")
+parser.add_option("-i", "--instructions", action="store_true", dest="instructions", default=False,
+                  help="Using Landing/Takeoff instructions")
 (opts, args) = parser.parse_args()
 
 if __name__ == '__main__':
     try:
-        publish_waypoints(opts.n)
+        publish_waypoints(opts.n, opts.instructions)
     except rospy.ROSInterruptException:
         pass
