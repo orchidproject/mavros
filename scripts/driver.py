@@ -306,7 +306,8 @@ class MavRosProxy:
                 wp_type = req.waypoints[i].type
             self.connection.mav.mission_item_send(self.connection.target_system, self.connection.target_component,
                                                   self.seq + i,
-                                                  mavutil.mavlink.MAV_FRAME_GLOBAL_RELATIVE_ALT,
+                                                  # mavutil.mavlink.MAV_FRAME_GLOBAL_RELATIVE_ALT,
+                                                  mavutil.mavlink.MAV_FRAME_LOCAL_NED,
                                                   wp_type, 0, req.waypoints[i].autocontinue,
                                                   req.waypoints[i].params[0], req.waypoints[i].params[1],
                                                   req.waypoints[i].params[2], req.waypoints[i].params[3],

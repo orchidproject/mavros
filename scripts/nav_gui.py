@@ -34,33 +34,33 @@ class NavGUI:
 
         info1 = Label(control_frame, text="Roll/Pitch", font=self.font)
         info1.grid(row=1, column=1)
-        pitch_forward = Button(control_frame, text="/\\", command=lambda: self.manual([1, 0, 0, 0]), font=self.font)
+        pitch_forward = Button(control_frame, text="/\\", command=lambda: self.manual.publish([0, -1, 0, 0]), font=self.font)
         pitch_forward.grid(row=0, column=1)
-        pitch_back = Button(control_frame, text="\\/", command=lambda: self.manual([-1, 0, 0, 0]), font=self.font)
+        pitch_back = Button(control_frame, text="\\/", command=lambda: self.manual.publish([0, 1, 0, 0]), font=self.font)
         pitch_back.grid(row=2, column=1)
-        roll_left = Button(control_frame, text="<", command=lambda: self.manual([0, 1, 0, 0]), font=self.font)
+        roll_left = Button(control_frame, text="<", command=lambda: self.manual.publish([-1, 0, 0, 0]), font=self.font)
         roll_left.grid(row=1, column=0)
-        roll_right = Button(control_frame, text=">", command=lambda: self.manual([0, -1, 0, 0]), font=self.font)
+        roll_right = Button(control_frame, text=">", command=lambda: self.manual.publish([1, 0, 0, 0]), font=self.font)
         roll_right.grid(row=1, column=2)
 
         info2 = Label(control_frame, text="Yaw/Alt", font=self.font)
         info2.grid(row=1, column=5)
-        alt_up = Button(control_frame, text="/\\", command=lambda: self.manual([0, 0, 1, 0]), font=self.font)
+        alt_up = Button(control_frame, text="/\\", command=lambda: self.manual.publish([0, 0, 1, 0]), font=self.font)
         alt_up.grid(row=0, column=5)
-        alt_down = Button(control_frame, text="\\/", command=lambda: self.manual([0, 0, -1, 0]), font=self.font)
+        alt_down = Button(control_frame, text="\\/", command=lambda: self.manual.publish([0, 0, -1, 0]), font=self.font)
         alt_down.grid(row=2, column=5)
-        yaw_left = Button(control_frame, text="<", command=lambda: self.manual([0, 0, 0, 1]), font=self.font)
+        yaw_left = Button(control_frame, text="<", command=lambda: self.manual.publish([0, 0, 0, -1]), font=self.font)
         yaw_left.grid(row=1, column=4)
-        yaw_right = Button(control_frame, text=">", command=lambda: self.manual([0, 0, 0, -1]), font=self.font)
+        yaw_right = Button(control_frame, text=">", command=lambda: self.manual.publish([0, 0, 0, 1]), font=self.font)
         yaw_right.grid(row=1, column=6)
 
         manual = Button(frame1, text="Manual", command=lambda: self.queue(11, []), font=self.font)
         manual.pack(side=LEFT)
         auto = Button(frame1, text="Auto", command=lambda: self.queue(12, []), font=self.font)
         auto.pack(side=RIGHT)
-        send = Button(frame2, text="Send Waypoints", command=self.send(), font=self.font)
+        send = Button(frame2, text="Send Waypoints", command=lambda: self.send(), font=self.font)
         send.pack(side=LEFT)
-        clear = Button(frame2, text="Clear Waypoints", command=self.queue(2, []), font=self.font)
+        clear = Button(frame2, text="Clear Waypoints", command=lambda: self.queue(2, []), font=self.font)
         clear.pack(side=RIGHT)
 
         takeoff = Button(frame3, text="Takeoff", command=lambda: self.queue(13, []), font=self.font)
@@ -70,8 +70,7 @@ class NavGUI:
         land = Button(frame3, text="Land", command=lambda: self.queue(14, []), font=self.font)
         land.pack(side=RIGHT)
 
-
-        emergency = Button(main_frame, text="Emergency Land", command=lambda: emergency(5), font=self.font)
+        emergency = Button(main_frame, text="Emergency Land", command=lambda: self.emergency(1), font=self.font)
         emergency.pack(side=BOTTOM)
 
         control_frame.pack()
@@ -81,15 +80,16 @@ class NavGUI:
         main_frame.grid(row=0, column=0)
 
     def setup_keyboard(self):
-        self.root.bind("<a>", lambda(event): self.manual([0, 1, 0, 0]))
-        self.root.bind("<s>", lambda(event): self.manual([-1, 0, 0, 0]))
-        self.root.bind("<d>", lambda(event): self.manual([0, -1, 0, 0]))
-        self.root.bind("<w>", lambda(event): self.manual([1, 0, 0, 0]))
+        self.root.bind("<w>", lambda(event): self.manual.publish([0, -1, 0, 0]))
+        self.root.bind("<s>", lambda(event): self.manual.publish([0, 1, 0, 0]))
+        self.root.bind("<a>", lambda(event): self.manual.publish([-1, 0, 0, 0]))
+        self.root.bind("<d>", lambda(event): self.manual.publish([1, 0, 0, 0]))
 
-        self.root.bind("<Up>", lambda(event): self.manual([0, 0, 1, 0]))
-        self.root.bind("<Down>", lambda(event): self.manual([0, 0, -1, 0]))
-        self.root.bind("<Left>", lambda(event): self.manual([0, 0, 0, 1]))
-        self.root.bind("<Right>", lambda(event): self.manual([0, 0, 0, -1]))
+
+        self.root.bind("<Up>", lambda(event): self.manual.publish([0, 0, 1, 0]))
+        self.root.bind("<Down>", lambda(event): self.manual.publish([0, 0, -1, 0]))
+        self.root.bind("<Left>", lambda(event): self.manual.publish([0, 0, 0, -1]))
+        self.root.bind("<Right>", lambda(event): self.manual.publish([0, 0, 0, 1]))
 
         self.root.bind("<q>", lambda(event): self.queue(11, []))
         self.root.bind("<e>", lambda(event): self.queue(12, []))
@@ -98,7 +98,7 @@ class NavGUI:
         self.root.bind("<c>", lambda(event): self.queue(2, []))
         self.root.bind("<v>", lambda(event): self.send())
         self.root.bind("<Shift_L>", lambda(event): self.queue(21, []))
-        self.root.bind("<space>", lambda(event): lambda: self.emergency(5))
+        self.root.bind("<space>", lambda(event): self.emergency(1))
 
     def setup_help(self):
         frame = Frame(self.root)
@@ -135,7 +135,7 @@ class NavGUI:
             self.queue(3, [])
             self.queue(2, [])
             self.queue(14, [])
-            rospy.sleep(0.2)
+            rospy.sleep(0.1)
 
 # *******************************************************************************
 # Parse any arguments that follow the node command
