@@ -11,6 +11,7 @@ uint8 CMD_AUTO = 12
 uint8 CMD_MANUAL_TAKEOFF = 13
 uint8 CMD_MANUAL_LAND = 14
 
+uint8 CMD_EMERGENCY = 20
 uint8 CMD_SWITCH_CAMERA = 21
 ---
 bool result

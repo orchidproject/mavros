@@ -131,10 +131,10 @@ class MavRosProxy:
                                                       req.channel[7])
 
     def param_list_cb(self, req):
-        if len(req.names) != len(req.values):
-            rospy.loginfo("Names and Values should be same size")
+        if len(req.values) > len(req.names):
+            rospy.loginfo("Values must be less or equal to names")
             return [], []
-        for i in range(len(req.names)):
+        for i in range(len(req.values)):
             rospy.loginfo("REQUESTED: " + req.names[i] + " " + str(req.values[i]))
             self.connection.param_set_send(req.names[i], req.values[i])
         self.connection.param_fetch_complete = False
@@ -145,10 +145,12 @@ class MavRosProxy:
             self.connection.param_fetch_all()
         while not self.connection.param_fetch_complete:
             rospy.sleep(0.1)
-        if len(req.names) == 1:
+        if len(req.names) == 0:
+            return self.connection.params.keys(), self.connection.params.values()
+        elif len(req.names) == 1:
             return req.names, [self.connection.params[req.names[0]]]
         else:
-            return self.connection.params.keys(), self.connection.params.values()
+            return req.names, [self.connection.params[i] for i in req.names if i in self.connection.params.keys()]
 
     def command_cb(self, req):
         start_time = rospy.Time.now().to_nsec()
@@ -193,21 +195,26 @@ class MavRosProxy:
         elif req.command == mavros.srv._Command.CommandRequest.CMD_HALT:
             #self.connection.mav.mission_set_current_send(self.connection.target_system,
             #                                             self.connection.target_component, 0)
-            self.connection.mav.mission_item_send(self.connection.target_system, self.connection.target_component,
-                                                  self.seq + 1,
-                                                  mavutil.mavlink.MAV_FRAME_GLOBAL_RELATIVE_ALT,
+            self.connection.mav.command_long_send(self.connection.target_system, 0,
                                                   mavutil.mavlink.MAV_CMD_OVERRIDE_GOTO,
-                                                  1, 0,
-                                                  mavutil.mavlink.MAV_GOTO_DO_HOLD,
+                                                  1, mavutil.mavlink.MAV_GOTO_DO_HOLD,
                                                   mavutil.mavlink.MAV_GOTO_HOLD_AT_CURRENT_POSITION,
                                                   mavutil.mavlink.MAV_FRAME_GLOBAL_RELATIVE_ALT,
-                                                  0, self.latitude, self.longitude, self.altitude)
-            self.seq += 1
+                                                  0, 0, 0, 0)
             return True
-        elif req.command == mavros.srv._Command.CommandRequest.CMD_GOTO:
-            self.connection.mav.mission_set_current_send(self.connection.target_system,
-                                                         self.connection.target_component, req.custom)
-            pass
+        elif req.command == mavros.srv._Command.CommandRequest.CMD_RESUME:
+            self.connection.mav.command_long_send(self.connection.target_system, 0,
+                                                  mavutil.mavlink.MAV_CMD_OVERRIDE_GOTO,
+                                                  1, mavutil.mavlink.MAV_GOTO_DO_CONTINUE,
+                                                  mavutil.mavlink.MAV_GOTO_HOLD_AT_CURRENT_POSITION,
+                                                  mavutil.mavlink.MAV_FRAME_GLOBAL_RELATIVE_ALT,
+                                                  0, 0, 0, 0)
+            return True
+        elif req.command == mavros.srv._Command.CommandRequest.CMD_EMERGENCY:
+            self.connection.mav.command_long_send(self.connection.target_system, 0,
+                                                  100,
+                                                  1, 0, 0, 0, 0, 0, 0, 0)
+            return True
         elif req.command == mavros.srv._Command.CommandRequest.CMD_MANUAL:
             if "MANUAL" not in self.modes.keys():
                 rospy.loginfo("This vehicle might not support manual, sending " + str(ADHOC_MANUAL))
@@ -466,6 +473,7 @@ class MavRosProxy:
                 rospy.loginfo("STATUSTEXT: Status severity is %d. Text Message is %s" % (msg.severity, msg.text))
 
             elif msg_type == "PARAM_VALUE":
+                #print msg
                 if self.param_req:
                     self.connection.param_fetch_complete = True
                     self.param_req = False

@@ -5,7 +5,7 @@ import tkFont
 import rospy
 import mavros.msg
 import mavros.srv
-
+from waypoint_tester import construct_waypoints
 
 class NavGUI:
     def __init__(self, prefix):
@@ -58,33 +58,36 @@ class NavGUI:
         manual.pack(side=LEFT)
         auto = Button(frame1, text="Auto", command=lambda: self.queue(12, []), font=self.font)
         auto.pack(side=RIGHT)
-        send = Button(frame2, text="Send Waypoints", command=lambda: self.send(), font=self.font)
-        send.pack(side=LEFT)
-        clear = Button(frame2, text="Clear Waypoints", command=lambda: self.queue(2, []), font=self.font)
-        clear.pack(side=RIGHT)
 
-        takeoff = Button(frame3, text="Takeoff", command=lambda: self.queue(13, []), font=self.font)
+        takeoff = Button(frame2, text="Takeoff", command=lambda: self.queue(13, []), font=self.font)
         takeoff.pack(side=LEFT)
-        camera = Button(frame3, text="Camera", command=lambda: self.queue(21, []), font=self.font)
+        camera = Button(frame2, text="Camera", command=lambda: self.queue(21, []), font=self.font)
         camera.pack(side=LEFT)
-        land = Button(frame3, text="Land", command=lambda: self.queue(14, []), font=self.font)
+        land = Button(frame2, text="Land", command=lambda: self.queue(14, []), font=self.font)
         land.pack(side=RIGHT)
 
+        send = Button(frame3, text="Send Waypoints", command=lambda: self.send(), font=self.font)
+        send.pack(side=LEFT)
+        clear = Button(frame3, text="Clear Waypoints", command=lambda: self.queue(2, []), font=self.font)
+        clear.pack(side=RIGHT)
         emergency = Button(main_frame, text="Emergency Land", command=lambda: self.emergency(1), font=self.font)
         emergency.pack(side=BOTTOM)
 
         control_frame.pack()
         frame1.pack()
         frame2.pack()
-        frame3.pack()
-        main_frame.grid(row=0, column=0)
+        frame3.pack(side=BOTTOM)
+        main_frame.grid(row=0, column=0, rowspan=3, sticky="nesw")
+
+        red_button = Button(self.root, text="KILL", command=lambda: self.queue(20, []),
+                            font=self.font, height=2, width=10, bg="red")
+        red_button.grid(row=1, column=2, sticky="nesw")
 
     def setup_keyboard(self):
         self.root.bind("<w>", lambda(event): self.manual.publish([0, -1, 0, 0]))
         self.root.bind("<s>", lambda(event): self.manual.publish([0, 1, 0, 0]))
         self.root.bind("<a>", lambda(event): self.manual.publish([-1, 0, 0, 0]))
         self.root.bind("<d>", lambda(event): self.manual.publish([1, 0, 0, 0]))
-
 
         self.root.bind("<Up>", lambda(event): self.manual.publish([0, 0, 1, 0]))
         self.root.bind("<Down>", lambda(event): self.manual.publish([0, 0, -1, 0]))
@@ -99,6 +102,7 @@ class NavGUI:
         self.root.bind("<v>", lambda(event): self.send())
         self.root.bind("<Shift_L>", lambda(event): self.queue(21, []))
         self.root.bind("<space>", lambda(event): self.emergency(1))
+        self.root.bind("<F12>", lambda (event): self.queue(20, []))
 
     def setup_help(self):
         frame = Frame(self.root)
@@ -124,14 +128,19 @@ class NavGUI:
         label10.grid(row=9)
         label11 = Label(frame, text="Emergency Land - Space", font=self.font)
         label11.grid(row=10)
-        frame.grid(row=0, column=1)
-
+        label11 = Label(frame, text="!!!KILL!!! - F12", font=self.font)
+        label11.grid(row=11)
+        frame.grid(row=0, column=1, rowspan=3, sticky="nesw")
 
     def send(self):
-        pass
+        instructions = construct_waypoints(1, False)
+        self.queue(1, instructions)
+        rospy.sleep(1)
+        self.queue(4, [])
 
     def emergency(self, times):
         for i in range(times):
+            self.queue(12, [])
             self.queue(3, [])
             self.queue(2, [])
             self.queue(14, [])

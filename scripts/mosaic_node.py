@@ -4,7 +4,8 @@ import mavros.msg
 import mavros.srv
 from std_msgs.msg import String
 
-CAMERA_PARAMETER = 'CAM-RECORD_HORI'
+CAMERA_PARAMETER = "CAM-RECORD_HORI"
+
 
 class ROSNode:
     def __init__(self, prefix, timeouts=3, client_timeout=30):
@@ -113,7 +114,7 @@ class ROSNode:
                 self.queue.append(i)
             return True
         elif req.command == mavros.srv._Queue.QueueRequest.CMD_CLEAR:
-            if self.mav_cmd(5, 0).result:
+            if self.mav_cmd(5, 0).result and not self.manual:
                 self.queue = list()
                 self.send = False
                 return True
@@ -185,6 +186,9 @@ class ROSNode:
                 return True
             else:
                 return False
+        elif req.command == mavros.srv._Queue.QueueRequest.CMD_EMERGENCY:
+            return self.mav_cmd(100, 0).result
+        return False
 
     def transmit_waypoints(self):
         print "SSSS", self.queue

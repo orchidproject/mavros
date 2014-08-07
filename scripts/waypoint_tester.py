@@ -5,15 +5,14 @@ import mavros.srv
 import sys
 
 
-def publish_waypoints(n, inst):
+def construct_waypoints(n, inst):
     if n == 1:
         start = 0
         inc = 1
     elif n == 2:
         start = 3
         inc = -1
-    rospy.init_node('waypoint_tester')
-    queue = rospy.ServiceProxy('/mosaic/queue', mavros.srv.Queue)
+
     while not rospy.is_shutdown():
         # Starting position should be 50.930042,-1.407951
         lat = [50.9297020, 50.9301280, 50.9302630, 50.9299370]
@@ -70,12 +69,7 @@ def publish_waypoints(n, inst):
             i.type = mavros.msg.Instruction.TYPE_LAND
             instructions.append(i)
 
-        resp = queue(1, instructions)
-        print("Waypoints Sent. Response: " + str(resp.result))
-        rospy.sleep(1)
-        resp = queue(4, [])
-        print("Execute Response: " + str(resp.result))
-        sys.exit()
+        return instructions
 
 # *******************************************************************************
 # Parse any arguments that follow the node command
@@ -91,6 +85,14 @@ parser.add_option("-i", "--instructions", action="store_true", dest="instruction
 
 if __name__ == '__main__':
     try:
-        publish_waypoints(opts.n, opts.instructions)
+        rospy.wait_for_service('/mosaic/queue')
+        queue = rospy.ServiceProxy('/mosaic/queue', mavros.srv.Queue)
+        inst = construct_waypoints(opts.n, opts.instructions)
+        resp = queue(1, inst)
+        print("Waypoints Sent. Response: " + str(resp.result))
+        rospy.sleep(1)
+        resp = queue(4, [])
+        print("Execute Response: " + str(resp.result))
+
     except rospy.ROSInterruptException:
         pass
