@@ -1,5 +1,6 @@
 uint8 type
 uint8 autocontinue
+uint8 frame
 
 float32 latitude
 float32 longitude
@@ -11,3 +12,6 @@ float32[4] params
 uint8 TYPE_NAV = 1
 uint8 TYPE_TAKEOFF = 2
 uint8 TYPE_LAND = 3
+
+uint8 TYPE_GLOBAL = 10
+uint8 TYPE_NED = 11

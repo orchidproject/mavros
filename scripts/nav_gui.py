@@ -7,6 +7,7 @@ import mavros.msg
 import mavros.srv
 from waypoint_tester import construct_waypoints
 
+
 class NavGUI:
     def __init__(self, prefix):
         self.root = Tk()
@@ -34,9 +35,11 @@ class NavGUI:
 
         info1 = Label(control_frame, text="Roll/Pitch", font=self.font)
         info1.grid(row=1, column=1)
-        pitch_forward = Button(control_frame, text="/\\", command=lambda: self.manual.publish([0, -1, 0, 0]), font=self.font)
+        pitch_forward = Button(control_frame, text="/\\", command=lambda: self.manual.publish([0, -1, 0, 0]),
+                               font=self.font)
         pitch_forward.grid(row=0, column=1)
-        pitch_back = Button(control_frame, text="\\/", command=lambda: self.manual.publish([0, 1, 0, 0]), font=self.font)
+        pitch_back = Button(control_frame, text="\\/", command=lambda: self.manual.publish([0, 1, 0, 0]),
+                            font=self.font)
         pitch_back.grid(row=2, column=1)
         roll_left = Button(control_frame, text="<", command=lambda: self.manual.publish([-1, 0, 0, 0]), font=self.font)
         roll_left.grid(row=1, column=0)
@@ -66,10 +69,13 @@ class NavGUI:
         land = Button(frame2, text="Land", command=lambda: self.queue(14, []), font=self.font)
         land.pack(side=RIGHT)
 
-        send = Button(frame3, text="Send Waypoints", command=lambda: self.send(), font=self.font)
+        send = Button(frame3, text="Send Waypoints", command=lambda: self.queue(1, construct_waypoints(1, False)),
+                      font=self.font)
         send.pack(side=LEFT)
         clear = Button(frame3, text="Clear Waypoints", command=lambda: self.queue(2, []), font=self.font)
         clear.pack(side=RIGHT)
+        run = Button(frame3, text="Execute", command=lambda: self.queue(4, []), font=self.font)
+        run.pack(side=RIGHT)
         emergency = Button(main_frame, text="Emergency Land", command=lambda: self.emergency(1), font=self.font)
         emergency.pack(side=BOTTOM)
 
@@ -84,24 +90,25 @@ class NavGUI:
         red_button.grid(row=1, column=2, sticky="nesw")
 
     def setup_keyboard(self):
-        self.root.bind("<w>", lambda(event): self.manual.publish([0, -1, 0, 0]))
-        self.root.bind("<s>", lambda(event): self.manual.publish([0, 1, 0, 0]))
-        self.root.bind("<a>", lambda(event): self.manual.publish([-1, 0, 0, 0]))
-        self.root.bind("<d>", lambda(event): self.manual.publish([1, 0, 0, 0]))
+        self.root.bind("<w>", lambda (event): self.manual.publish([0, -1, 0, 0]))
+        self.root.bind("<s>", lambda (event): self.manual.publish([0, 1, 0, 0]))
+        self.root.bind("<a>", lambda (event): self.manual.publish([-1, 0, 0, 0]))
+        self.root.bind("<d>", lambda (event): self.manual.publish([1, 0, 0, 0]))
 
-        self.root.bind("<Up>", lambda(event): self.manual.publish([0, 0, 1, 0]))
-        self.root.bind("<Down>", lambda(event): self.manual.publish([0, 0, -1, 0]))
-        self.root.bind("<Left>", lambda(event): self.manual.publish([0, 0, 0, -1]))
-        self.root.bind("<Right>", lambda(event): self.manual.publish([0, 0, 0, 1]))
+        self.root.bind("<Up>", lambda (event): self.manual.publish([0, 0, 1, 0]))
+        self.root.bind("<Down>", lambda (event): self.manual.publish([0, 0, -1, 0]))
+        self.root.bind("<Left>", lambda (event): self.manual.publish([0, 0, 0, -1]))
+        self.root.bind("<Right>", lambda (event): self.manual.publish([0, 0, 0, 1]))
 
-        self.root.bind("<q>", lambda(event): self.queue(11, []))
-        self.root.bind("<e>", lambda(event): self.queue(12, []))
-        self.root.bind("<r>", lambda(event): self.queue(13, []))
-        self.root.bind("<f>", lambda(event): self.queue(14, []))
-        self.root.bind("<c>", lambda(event): self.queue(2, []))
-        self.root.bind("<v>", lambda(event): self.send())
-        self.root.bind("<Shift_L>", lambda(event): self.queue(21, []))
-        self.root.bind("<space>", lambda(event): self.emergency(1))
+        self.root.bind("<q>", lambda (event): self.queue(11, []))
+        self.root.bind("<e>", lambda (event): self.queue(12, []))
+        self.root.bind("<r>", lambda (event): self.queue(13, []))
+        self.root.bind("<f>", lambda (event): self.queue(14, []))
+        self.root.bind("<c>", lambda (event): self.queue(2, []))
+        self.root.bind("<v>", lambda (event): self.queue(1, construct_waypoints(1, False)))
+        self.root.bind("<Control_L>", lambda (event): self.queue(4, []))
+        self.root.bind("<Shift_L>", lambda (event): self.queue(21, []))
+        self.root.bind("<space>", lambda (event): self.emergency(1))
         self.root.bind("<F12>", lambda (event): self.queue(20, []))
 
     def setup_help(self):
@@ -126,17 +133,14 @@ class NavGUI:
         label9.grid(row=8)
         label10 = Label(frame, text="Send waypoints - V", font=self.font)
         label10.grid(row=9)
-        label11 = Label(frame, text="Emergency Land - Space", font=self.font)
+        label11 = Label(frame, text="Execute - CTRL", font=self.font)
         label11.grid(row=10)
-        label11 = Label(frame, text="!!!KILL!!! - F12", font=self.font)
-        label11.grid(row=11)
+        label12 = Label(frame, text="Emergency Land - Space", font=self.font)
+        label12.grid(row=11)
+        label13 = Label(frame, text="!!!KILL!!! - F12", font=self.font)
+        label13.grid(row=12)
         frame.grid(row=0, column=1, rowspan=3, sticky="nesw")
 
-    def send(self):
-        instructions = construct_waypoints(1, False)
-        self.queue(1, instructions)
-        rospy.sleep(1)
-        self.queue(4, [])
 
     def emergency(self, times):
         for i in range(times):
@@ -155,7 +159,6 @@ parser = OptionParser("mosaic_node.py [options]")
 parser.add_option("-p", "--prefix", dest="prefix", default="/mosaic/",
                   help="prefix of the mavros node")
 (opts, args) = parser.parse_args()
-
 
 if __name__ == '__main__':
     try:

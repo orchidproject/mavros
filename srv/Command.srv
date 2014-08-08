@@ -1,6 +1,7 @@
 uint8 command
 uint8 custom
 
+uint8 CMD_COMMAND = 0
 uint8 CMD_TAKEOFF = 1
 uint8 CMD_LAND = 2
 uint8 CMD_MANUAL = 3
@@ -10,6 +11,5 @@ uint8 CMD_BASE_MODE = 10
 uint8 CMD_CUSTOM_MODE = 11
 uint8 CMD_HALT = 20
 uint8 CMD_RESUME = 21
-uint8 CMD_EMERGENCY=100
 ---
 bool result
