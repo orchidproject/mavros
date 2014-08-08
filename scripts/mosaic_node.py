@@ -15,7 +15,11 @@ class ROSNode:
         self.last_manual = 0
         self.last_client = 0
         self.client_timeout = client_timeout
-        self.send = 0
+        self.extra = 0
+        self.state = mavros.msg.State()
+        #self.current = 0
+        #self.last = 0
+        #self.send = 0
         self.timeouts = timeouts
         self.queue = list()
         self.state = mavros.msg.State()
@@ -34,8 +38,9 @@ class ROSNode:
 
     def start(self):
         rospy.init_node("mosaic_node")
-        rospy.loginfo("Requesting parameters...")
+        rospy.loginfo("Requesting parameters and clearing waypoints...")
         params = self.mav_params([], [])
+        self.mav_cmd(5, 0)
         rospy.Service("queue", mavros.srv.Queue, self.queue_cb)
         rospy.loginfo("Parameters received, Queue is ready.")
         for i in range(len(params.names)):
@@ -52,20 +57,22 @@ class ROSNode:
                 elif rospy.Time.now().to_sec() - self.last_manual > 0.2:
                     self.last_manual = rospy.Time.now().to_sec()
                     self.mav_rc.publish(self.empty_RC)
-            elif self.execute and len(self.queue) > 0:
+            elif self.execute and self.state.current+self.extra != len(self.queue):
                 result = True
                 for i in range(self.timeouts):
-                    if self.queue[0].type == mavros.msg.Instruction.TYPE_TAKEOFF:
+                    if self.queue[self.state.current+self.extra].type == mavros.msg.Instruction.TYPE_TAKEOFF:
                         result = self.mav_cmd([mavros.srv._Command.CommandRequest.CMD_TAKEOFF, 0])
-                    elif self.queue[0].type == mavros.msg.Instruction.TYPE_LAND:
+                        self.extra += 1
+                    elif self.queue[self.state.current+self.extra].type == mavros.msg.Instruction.TYPE_LAND:
                         result = self.mav_cmd([mavros.srv._Command.CommandRequest.CMD_LAND, 0])
+                        self.extra += 1
                     if result:
                         break
                 if not result:
                     rospy.loginfo("UNABLE TO EXECUTE! PAUSING QUEUE...")
+                    self.extra -= 1
                     self.execute = False
                 else:
-                    #self.queue.pop(0)
                     result = False
                     for i in range(self.timeouts):
                         result = self.transmit_waypoints()
@@ -74,7 +81,10 @@ class ROSNode:
                     if not result:
                         rospy.loginfo("UNABLE TO TRANSMIT! PAUSING QUEUE...")
                         self.execute = False
-            next_instruction = mavros.msg.Instruction()
+            if self.state.current+self.extra >= len(self.queue):
+                next_instruction = mavros.msg.Instruction()
+            else:
+                next_instruction = self.queue[self.state.current+self.extra]
             if len(self.queue) > 0:
                 if self.manual:
                     self.state.base_mode = 3
@@ -112,7 +122,7 @@ class ROSNode:
         self.last_client = self.last_manual
 
     def update_queue_cb(self, req):
-        pass
+        self.state = req
 
     def queue_cb(self, req):
         # print req
@@ -123,7 +133,7 @@ class ROSNode:
         elif req.command == mavros.srv._Queue.QueueRequest.CMD_CLEAR:
             if not self.manual and self.mav_cmd(5, 0).result:
                 self.queue = list()
-                self.send = 0
+                self.extra = 0
                 return True
             return False
         elif req.command == mavros.srv._Queue.QueueRequest.CMD_PAUSE:
@@ -134,9 +144,12 @@ class ROSNode:
                 return True
             return False
         elif req.command == mavros.srv._Queue.QueueRequest.CMD_EXECUTE:
-            result = self.transmit_waypoints()
-            self.execute = True
-            return result
+            if self.execute:
+                return True
+            if self.mav_cmd(21, 0).result:
+                self.execute = True
+                return True
+            return False
         elif req.command == mavros.srv._Queue.QueueRequest.CMD_MANUAL:
             self.last_client = rospy.Time.now().to_sec()
             if self.manual:
@@ -198,7 +211,7 @@ class ROSNode:
 
     def transmit_waypoints(self):
         waypoints = list()
-        for i in range(self.send, len(self.queue)):
+        for i in range(self.state.missions+self.extra, len(self.queue)):
             if self.queue[i].type != mavros.msg.Instruction.TYPE_GOTO:
                 break
             waypoint_msg = mavros.msg.Waypoint()
@@ -212,7 +225,6 @@ class ROSNode:
             waypoints.append(waypoint_msg)
         if len(waypoints) > 0:
             if self.mav_wps(waypoints).result:
-                self.send += len(waypoints)
                 return True
             else:
                 return False

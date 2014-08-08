@@ -103,7 +103,7 @@ class MavRosProxy:
         self.pub_imu = rospy.Publisher('imu', Imu, queue_size=10)
         # self.pub_rc = rospy.Publisher('rc', mavros.msg.RC, queue_size=10)
         self.pub_state = rospy.Publisher('state', mavros.msg.State, queue_size=10)
-        #self.pub_vfr_hud = rospy.Publisher('vfr_hud', mavros.msg.VFR_HUD, queue_size=10)
+        # self.pub_vfr_hud = rospy.Publisher('vfr_hud', mavros.msg.VFR_HUD, queue_size=10)
         self.pub_attitude = rospy.Publisher('attitude', mavros.msg.Attitude, queue_size=10)
         self.pub_raw_imu = rospy.Publisher('raw_imu', mavros.msg.Mavlink_RAW_IMU, queue_size=10)
         self.pub_status = rospy.Publisher('status', mavros.msg.Status, queue_size=10)
@@ -184,7 +184,7 @@ class MavRosProxy:
             return True
         elif req.command == mavros.srv._Command.CommandRequest.CMD_HALT:
             # self.connection.mav.mission_set_current_send(self.connection.target_system,
-            #                                             self.connection.target_component, 0)
+            # self.connection.target_component, 0)
             self.connection.mav.command_long_send(self.connection.target_system, 0,
                                                   mavutil.mavlink.MAV_CMD_OVERRIDE_GOTO,
                                                   1, mavutil.mavlink.MAV_GOTO_DO_HOLD,
@@ -293,7 +293,8 @@ class MavRosProxy:
                 rospy.loginfo("Failed to send %d'th waypoint")
                 return False
         if old == 0:
-            self.connection.mav.mission_set_current_send(self.connection.target_system, self.connection.target_component,1)
+            self.connection.mav.mission_set_current_send(self.connection.target_system,
+                                                         self.connection.target_component, 1)
         return True
 
     def transmit_waypoint(self, waypoint):
@@ -311,7 +312,7 @@ class MavRosProxy:
                                                   waypoint.altitude)
             rospy.sleep(0.1)
             self.connection.waypoint_request_list_send()
-            while old != self.state.missions-1:
+            while old != self.state.missions - 1:
                 if (rospy.Time.now().to_sec() - start_time) > self.command_timeout:
                     rospy.loginfo("Timeout while sending waypoint...")
                     return False
@@ -321,7 +322,7 @@ class MavRosProxy:
                 break
             self.seq += 1
             rospy.sleep(0.1)
-        return old == (self.state.missions-1)
+        return old == (self.state.missions - 1)
 
     def start(self):
         rospy.init_node("mavros")
@@ -347,7 +348,7 @@ class MavRosProxy:
             elif msg_type == "RC_CHANNELS_RAW":
                 pass
                 # self.pub_rc.publish([msg.chan1_raw, msg.chan2_raw, msg.chan3_raw,
-                #                     msg.chan4_raw, msg.chan5_raw, msg.chan6_raw,
+                # msg.chan4_raw, msg.chan5_raw, msg.chan6_raw,
                 #                     msg.chan7_raw, msg.chan8_raw])
 
             elif msg_type == "HEARTBEAT":
@@ -360,7 +361,7 @@ class MavRosProxy:
             elif msg_type == "VFR_HUD":
                 pass
                 # self.pub_vfr_hud.publish(msg.airspeed, msg.groundspeed, msg.heading, msg.throttle, msg.alt,
-                #                         msg.climb)
+                # msg.climb)
 
             elif msg_type == "GPS_RAW_INT":
                 fix = NavSatStatus.STATUS_NO_FIX
@@ -420,18 +421,18 @@ class MavRosProxy:
                 # self.pub_current_mission.publish(self.current_mission_msg)
                 # self.pub_control_output.publish(msg.nav_roll, msg.nav_pitch,
                 # msg.nav_bearing, msg.alt_error,
-                #                                 msg.aspd_error, msg.xtrack_error)
+                # msg.aspd_error, msg.xtrack_error)
 
             elif msg_type == "MISSION_CURRENT":
                 self.state.current = msg.seq
                 # self.current_mission_msg.header.stamp = rospy.Time.now()
-                #self.current_mission_msg.mission_num = msg.seq
+                # self.current_mission_msg.mission_num = msg.seq
                 #self.pub_current_mission.publish(self.current_mission_msg)
 
             elif msg_type == "MISSION_ITEM":
                 print msg
                 # header = Header()
-                #header.stamp = rospy.Time.now()
+                # header.stamp = rospy.Time.now()
                 #self.pub_mission_item.publish(header, msg.seq, msg.current,
                 #                              msg.autocontinue, msg.param1,
                 #                              msg.param2, msg.param3, msg.param4,

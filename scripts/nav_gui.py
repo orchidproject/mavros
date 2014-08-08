@@ -32,6 +32,7 @@ class NavGUI:
         frame1 = Frame(main_frame)
         frame2 = Frame(main_frame)
         frame3 = Frame(main_frame)
+        frame4 = Frame(main_frame)
 
         info1 = Label(control_frame, text="Roll/Pitch", font=self.font)
         info1.grid(row=1, column=1)
@@ -74,14 +75,19 @@ class NavGUI:
         send.pack(side=LEFT)
         clear = Button(frame3, text="Clear Waypoints", command=lambda: self.queue(2, []), font=self.font)
         clear.pack(side=RIGHT)
-        run = Button(frame3, text="Execute", command=lambda: self.queue(4, []), font=self.font)
-        run.pack(side=RIGHT)
-        emergency = Button(main_frame, text="Emergency Land", command=lambda: self.emergency(1), font=self.font)
+
+        run = Button(frame4, text="Execute", command=lambda: self.queue(4, []), font=self.font)
+        run.pack(side=LEFT)
+        pause = Button(frame4, text="PAUSE", command=lambda: self.queue(3, []), font=self.font)
+        pause.pack(side=RIGHT)
+
+        emergency = Button(main_frame, text="Emergency Land", command=lambda: self.emergency(2), font=self.font)
         emergency.pack(side=BOTTOM)
 
         control_frame.pack()
-        frame1.pack()
-        frame2.pack()
+        frame1.pack(side=TOP)
+        frame2.pack(side=TOP)
+        frame4.pack(side=BOTTOM)
         frame3.pack(side=BOTTOM)
         main_frame.grid(row=0, column=0, rowspan=3, sticky="nesw")
 
@@ -107,8 +113,9 @@ class NavGUI:
         self.root.bind("<c>", lambda (event): self.queue(2, []))
         self.root.bind("<v>", lambda (event): self.queue(1, construct_waypoints(1, False)))
         self.root.bind("<Control_L>", lambda (event): self.queue(4, []))
+        self.root.bind("<Alt_L>", lambda (event): self.queue(3, []))
         self.root.bind("<Shift_L>", lambda (event): self.queue(21, []))
-        self.root.bind("<space>", lambda (event): self.emergency(1))
+        self.root.bind("<space>", lambda (event): self.emergency(2))
         self.root.bind("<F12>", lambda (event): self.queue(20, []))
 
     def setup_help(self):
@@ -135,10 +142,12 @@ class NavGUI:
         label10.grid(row=9)
         label11 = Label(frame, text="Execute - CTRL", font=self.font)
         label11.grid(row=10)
-        label12 = Label(frame, text="Emergency Land - Space", font=self.font)
+        label12 = Label(frame, text="Pause - ALT", font=self.font)
         label12.grid(row=11)
-        label13 = Label(frame, text="!!!KILL!!! - F12", font=self.font)
+        label13 = Label(frame, text="Emergency Land - Space", font=self.font)
         label13.grid(row=12)
+        label14 = Label(frame, text="!!!KILL!!! - F12", font=self.font)
+        label14.grid(row=13)
         frame.grid(row=0, column=1, rowspan=3, sticky="nesw")
 
 
@@ -146,7 +155,6 @@ class NavGUI:
         for i in range(times):
             self.queue(12, [])
             self.queue(3, [])
-            self.queue(2, [])
             self.queue(14, [])
             rospy.sleep(0.1)
 
