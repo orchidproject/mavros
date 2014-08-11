@@ -1,0 +1,6 @@
+<launch>
+        <include file="$(find mavros)/launch/gui_manual.launch">
+		<arg name="address" value="192.168.1.3" />
+ 		<arg name="csv_file" value="$(find ar2mav)/map.csv" />
+	</include>
+</launch>
