@@ -5,7 +5,7 @@ import tkFont
 import rospy
 import mavros.msg
 import mavros.srv
-from waypoint_tester import construct_waypoints
+from waypoint_tester import construct_waypoints_global, construct_waypoints_local
 
 
 class NavGUI:
@@ -70,7 +70,7 @@ class NavGUI:
         land = Button(frame2, text="Land", command=lambda: self.queue(14, []), font=self.font)
         land.pack(side=RIGHT)
 
-        send = Button(frame3, text="Send Waypoints", command=lambda: self.queue(1, construct_waypoints(1, False)),
+        send = Button(frame3, text="Send Waypoints", command=lambda: self.queue(1, construct_waypoints_local(1, False)),
                       font=self.font)
         send.pack(side=LEFT)
         clear = Button(frame3, text="Clear Waypoints", command=lambda: self.queue(2, []), font=self.font)
@@ -111,10 +111,10 @@ class NavGUI:
         self.root.bind("<r>", lambda (event): self.queue(13, []))
         self.root.bind("<f>", lambda (event): self.queue(14, []))
         self.root.bind("<c>", lambda (event): self.queue(2, []))
-        self.root.bind("<v>", lambda (event): self.queue(1, construct_waypoints(1, False)))
-        self.root.bind("<Control_L>", lambda (event): self.queue(4, []))
-        self.root.bind("<Alt_L>", lambda (event): self.queue(3, []))
-        self.root.bind("<Shift_L>", lambda (event): self.queue(21, []))
+        self.root.bind("<v>", lambda (event): self.queue(1, construct_waypoints_local(1, False)))
+        self.root.bind("<k>", lambda (event): self.queue(4, []))
+        self.root.bind("<l>", lambda (event): self.queue(3, []))
+        self.root.bind("<j>", lambda (event): self.queue(21, []))
         self.root.bind("<space>", lambda (event): self.emergency(2))
         self.root.bind("<F12>", lambda (event): self.queue(20, []))
 
@@ -134,15 +134,15 @@ class NavGUI:
         label6.grid(row=5)
         label7 = Label(frame, text="Land - F", font=self.font)
         label7.grid(row=6)
-        label8 = Label(frame, text="Toggle Camera - Shift", font=self.font)
+        label8 = Label(frame, text="Toggle Camera - J", font=self.font)
         label8.grid(row=7)
         label9 = Label(frame, text="Clear Waypoints - C", font=self.font)
         label9.grid(row=8)
         label10 = Label(frame, text="Send waypoints - V", font=self.font)
         label10.grid(row=9)
-        label11 = Label(frame, text="Execute - CTRL", font=self.font)
+        label11 = Label(frame, text="Execute - K", font=self.font)
         label11.grid(row=10)
-        label12 = Label(frame, text="Pause - ALT", font=self.font)
+        label12 = Label(frame, text="Pause - L", font=self.font)
         label12.grid(row=11)
         label13 = Label(frame, text="Emergency Land - Space", font=self.font)
         label13.grid(row=12)

@@ -5,7 +5,7 @@ import mavros.srv
 import sys
 
 
-def construct_waypoints(n, inst):
+def construct_waypoints_global(n, inst):
     if n == 1:
         start = 0
         inc = 1
@@ -15,8 +15,8 @@ def construct_waypoints(n, inst):
 
     while not rospy.is_shutdown():
         # Starting position should be 50.930042,-1.407951
-        lat = [50.9297020, 50.9301280, 50.9302630, 50.9299370]
-        lon = [-1.4081360, -1.4083990, -1.4077010, -1.4074140]
+        lat = [50.9298172, 50.9299545, 50.9299545, 50.9298172]
+        lon = [-1.4078220, -1.4078220, -1.4075130, -1.4075130]
         instructions = list()
 
         if inst:
@@ -26,17 +26,19 @@ def construct_waypoints(n, inst):
 
         i = mavros.msg.Instruction()
         i.type = mavros.msg.Instruction.TYPE_GOTO
+        i.frame = mavros.msg.Instruction.FRAME_GLOBAL
         i.latitude = lat[start]
         i.longitude = lon[start]
-        i.altitude = 3
+        i.altitude = 1.5
         instructions.append(i)
         start += inc
 
         i = mavros.msg.Instruction()
         i.type = mavros.msg.Instruction.TYPE_GOTO
+        i.frame = mavros.msg.Instruction.FRAME_GLOBAL
         i.latitude = lat[start]
         i.longitude = lon[start]
-        i.altitude = 3
+        i.altitude = 1.5
         instructions.append(i)
         start += inc
 
@@ -51,17 +53,19 @@ def construct_waypoints(n, inst):
 
         i = mavros.msg.Instruction()
         i.type = mavros.msg.Instruction.TYPE_GOTO
+        i.frame = mavros.msg.Instruction.FRAME_GLOBAL
         i.latitude = lat[start]
         i.longitude = lon[start]
-        i.altitude = 3
+        i.altitude = 1.5
         instructions.append(i)
         start += inc
 
         i = mavros.msg.Instruction()
         i.type = mavros.msg.Instruction.TYPE_GOTO
+        i.frame = mavros.msg.Instruction.FRAME_GLOBAL
         i.latitude = lat[start]
         i.longitude = lon[start]
-        i.altitude = 3
+        i.altitude = 1.5
         instructions.append(i)
 
         if inst:
@@ -70,6 +74,78 @@ def construct_waypoints(n, inst):
             instructions.append(i)
 
         return instructions
+
+
+def construct_waypoints_local(n, inst):
+    if n == 1:
+        start = 0
+        inc = 1
+    elif n == 2:
+        start = 3
+        inc = -1
+
+    while not rospy.is_shutdown():
+        # Starting position should be 50.930042,-1.407951
+        lat = [3, -6,  0, 6]
+        lon = [4,  0, -8, 0]
+        instructions = list()
+
+        if inst:
+            i = mavros.msg.Instruction()
+            i.type = mavros.msg.Instruction.TYPE_TAKEOFF
+            instructions.append(i)
+
+        i = mavros.msg.Instruction()
+        i.type = mavros.msg.Instruction.TYPE_GOTO
+        i.frame = mavros.msg.Instruction.FRAME_LOCAL
+        i.latitude = lat[start]
+        i.longitude = lon[start]
+        i.altitude = 1.5
+        instructions.append(i)
+        start += inc
+
+        i = mavros.msg.Instruction()
+        i.type = mavros.msg.Instruction.TYPE_GOTO
+        i.frame = mavros.msg.Instruction.FRAME_LOCAL
+        i.latitude = lat[start]
+        i.longitude = lon[start]
+        i.altitude = 1.5
+        instructions.append(i)
+        start += inc
+
+        if inst:
+            i = mavros.msg.Instruction()
+            i.type = mavros.msg.Instruction.TYPE_LAND
+            instructions.append(i)
+
+            i = mavros.msg.Instruction()
+            i.type = mavros.msg.Instruction.TYPE_TAKEOFF
+            instructions.append(i)
+
+        i = mavros.msg.Instruction()
+        i.type = mavros.msg.Instruction.TYPE_GOTO
+        i.frame = mavros.msg.Instruction.FRAME_LOCAL
+        i.latitude = lat[start]
+        i.longitude = lon[start]
+        i.altitude = 1.5
+        instructions.append(i)
+        start += inc
+
+        i = mavros.msg.Instruction()
+        i.type = mavros.msg.Instruction.TYPE_GOTO
+        i.frame = mavros.msg.Instruction.FRAME_LOCAL
+        i.latitude = lat[start]
+        i.longitude = lon[start]
+        i.altitude = 1.5
+        instructions.append(i)
+
+        if inst:
+            i = mavros.msg.Instruction()
+            i.type = mavros.msg.Instruction.TYPE_LAND
+            instructions.append(i)
+
+        return instructions
+
 
 # *******************************************************************************
 # Parse any arguments that follow the node command
@@ -87,8 +163,8 @@ if __name__ == '__main__':
     try:
         rospy.wait_for_service('/mosaic/queue')
         queue = rospy.ServiceProxy('/mosaic/queue', mavros.srv.Queue)
-        inst = construct_waypoints(opts.n, opts.instructions)
-        resp = queue(1, inst)
+        wps = construct_waypoints_global(opts.n, opts.instructions)
+        resp = queue(1, wps)
         print("Waypoints Sent. Response: " + str(resp.result))
         rospy.sleep(1)
         resp = queue(4, [])
