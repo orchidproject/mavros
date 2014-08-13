@@ -82,7 +82,7 @@ ADHOC_MANUAL = 99
 
 
 class MavRosProxy:
-    def __init__(self, device, baudrate, command_timeout=5, altitude_min=1, altitude_max=10):
+    def __init__(self, device, baudrate, command_timeout=2, altitude_min=1, altitude_max=10):
         self.command_timeout = command_timeout
         self.device = device
         self.baudrate = baudrate
@@ -127,23 +127,28 @@ class MavRosProxy:
         if len(req.values) > len(req.names):
             rospy.loginfo("Values must be less or equal to names")
             return [], []
-        for i in range(len(req.values)):
-            rospy.loginfo("REQUESTED: " + req.names[i] + " " + str(req.values[i]))
-            self.connection.param_set_send(req.names[i], req.values[i])
-        self.connection.param_fetch_complete = False
-        if len(req.names) == 1:
-            self.param_req = True
-            self.connection.param_fetch_one(req.names[0])
-        else:
-            self.connection.param_fetch_all()
-        while not self.connection.param_fetch_complete:
-            rospy.sleep(0.1)
         if len(req.names) == 0:
+            self.connection.param_fetch_complete = False
+            self.connection.param_fetch_all()
+            while not self.connection.param_fetch_complete:
+                rospy.sleep(0.1)
             return self.connection.params.keys(), self.connection.params.values()
-        elif len(req.names) == 1:
-            return req.names, [self.connection.params[req.names[0]]]
-        else:
-            return req.names, [self.connection.params[i] for i in req.names if i in self.connection.params.keys()]
+
+        values = list()
+        for i in range(len(req.values)):
+            start_time = rospy.Time.now().to_sec()
+            rospy.loginfo("REQUESTED: " + req.names[i] + " " + str(req.values[i]))
+            self.param_req = True
+            self.connection.param_fetch_complete = False
+            self.connection.param_set_send(req.names[i], req.values[i])
+            while not self.connection.param_fetch_complete:
+                rospy.sleep(0.1)
+                if (rospy.Time.now().to_sec() - start_time) > self.command_timeout:
+                    values.append(0.0)
+                    break
+            if self.connection.param_fetch_complete:
+                values.append(self.connection.params[req.names[i]])
+        return req.names, values
 
     def command_cb(self, req):
         start_time = rospy.Time.now().to_sec()
@@ -483,7 +488,6 @@ class MavRosProxy:
                 rospy.loginfo("STATUSTEXT: Status severity is %d. Text Message is %s" % (msg.severity, msg.text))
 
             elif msg_type == "PARAM_VALUE":
-                # print msg
                 if self.param_req:
                     self.connection.param_fetch_complete = True
                     self.param_req = False
@@ -491,7 +495,7 @@ class MavRosProxy:
 
 if __name__ == '__main__':
     try:
-        proxy = MavRosProxy(opts.device, opts.type, opts.baudrate)
+        proxy = MavRosProxy(opts.device, opts.baudrate)
         proxy.start()
     except rospy.ROSInterruptException:
         pass

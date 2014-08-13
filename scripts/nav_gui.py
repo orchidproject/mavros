@@ -5,6 +5,7 @@ import tkFont
 import rospy
 import mavros.msg
 import mavros.srv
+import mosaic_node as q
 from waypoint_tester import construct_waypoints_global, construct_waypoints_local
 
 
@@ -16,11 +17,15 @@ class NavGUI:
         self.prefix = prefix
         self.queue = None
         self.manual = None
+        self.inst = None
+        self.origin = None
 
     def start(self):
         rospy.init_node("nav_gui")
         self.manual = rospy.Publisher(self.prefix + "velocity", mavros.msg.Velocity, queue_size=1000)
+        self.inst = rospy.Publisher(self.prefix + "instructions", mavros.msg.InstructionList, queue_size=100)
         self.queue = rospy.ServiceProxy(self.prefix + "queue", mavros.srv.Queue)
+        rospy.Subscriber("/apm/filtered_pos", mavros.msg.FilteredPosition, self.gps_cb)
         self.setup_gui()
         self.setup_keyboard()
         self.setup_help()
@@ -58,28 +63,30 @@ class NavGUI:
         yaw_right = Button(control_frame, text=">", command=lambda: self.manual.publish([0, 0, 0, 1]), font=self.font)
         yaw_right.grid(row=1, column=6)
 
-        manual = Button(frame1, text="Manual", command=lambda: self.queue(11, []), font=self.font)
+        manual = Button(frame1, text="Manual", command=lambda: self.queue(q.CMD_MANUAL), font=self.font)
         manual.pack(side=LEFT)
-        auto = Button(frame1, text="Auto", command=lambda: self.queue(12, []), font=self.font)
+        auto = Button(frame1, text="Auto", command=lambda: self.queue(q.CMD_AUTO), font=self.font)
         auto.pack(side=RIGHT)
 
-        takeoff = Button(frame2, text="Takeoff", command=lambda: self.queue(13, []), font=self.font)
+        takeoff = Button(frame2, text="Takeoff", command=lambda: self.queue(q.CMD_MANUAL_TAKEOFF), font=self.font)
         takeoff.pack(side=LEFT)
-        camera = Button(frame2, text="Camera", command=lambda: self.queue(21, []), font=self.font)
+        camera = Button(frame2, text="Camera", command=lambda: self.queue(q.CMD_SWITCH_CAMERA), font=self.font)
         camera.pack(side=LEFT)
-        land = Button(frame2, text="Land", command=lambda: self.queue(14, []), font=self.font)
+        land = Button(frame2, text="Land", command=lambda: self.queue(q.CMD_MANUAL_LAND), font=self.font)
         land.pack(side=RIGHT)
 
-        send = Button(frame3, text="Send Waypoints", command=lambda: self.queue(1, construct_waypoints_local(1, False)),
-                      font=self.font)
+        send = Button(frame3, text="Send Waypoints",
+                      command=lambda: self.inst.publish(construct_waypoints_global(1, False)), font=self.font)
         send.pack(side=LEFT)
-        clear = Button(frame3, text="Clear Waypoints", command=lambda: self.queue(2, []), font=self.font)
+        clear = Button(frame3, text="Clear Waypoints", command=lambda: self.queue(q.CMD_CLEAR), font=self.font)
         clear.pack(side=RIGHT)
 
-        run = Button(frame4, text="Execute", command=lambda: self.queue(4, []), font=self.font)
+        run = Button(frame4, text="Execute", command=lambda: self.queue(q.CMD_EXECUTE), font=self.font)
         run.pack(side=LEFT)
-        pause = Button(frame4, text="PAUSE", command=lambda: self.queue(3, []), font=self.font)
-        pause.pack(side=RIGHT)
+        pause = Button(frame4, text="Pause", command=lambda: self.queue(q.CMD_PAUSE), font=self.font)
+        pause.pack(side=LEFT)
+        origin = Button(frame4, text="Set Origin", command=lambda: self.inst.publish(self.origin) if self.origin else None, font=self.font)
+        origin.pack(side=RIGHT)
 
         emergency = Button(main_frame, text="Emergency Land", command=lambda: self.emergency(2), font=self.font)
         emergency.pack(side=BOTTOM)
@@ -106,17 +113,17 @@ class NavGUI:
         self.root.bind("<Left>", lambda (event): self.manual.publish([0, 0, 0, -1]))
         self.root.bind("<Right>", lambda (event): self.manual.publish([0, 0, 0, 1]))
 
-        self.root.bind("<q>", lambda (event): self.queue(11, []))
-        self.root.bind("<e>", lambda (event): self.queue(12, []))
-        self.root.bind("<r>", lambda (event): self.queue(13, []))
-        self.root.bind("<f>", lambda (event): self.queue(14, []))
-        self.root.bind("<c>", lambda (event): self.queue(2, []))
-        self.root.bind("<v>", lambda (event): self.queue(1, construct_waypoints_local(1, False)))
-        self.root.bind("<k>", lambda (event): self.queue(4, []))
-        self.root.bind("<l>", lambda (event): self.queue(3, []))
-        self.root.bind("<j>", lambda (event): self.queue(21, []))
+        self.root.bind("<q>", lambda (event): self.queue(q.CMD_MANUAL))
+        self.root.bind("<e>", lambda (event): self.queue(q.CMD_AUTO))
+        self.root.bind("<r>", lambda (event): self.queue(q.CMD_MANUAL_TAKEOFF))
+        self.root.bind("<f>", lambda (event): self.queue(q.CMD_MANUAL_LAND))
+        self.root.bind("<c>", lambda (event): self.queue(q.CMD_CLEAR))
+        self.root.bind("<v>", lambda (event): self.inst.publish(construct_waypoints_local(1, False)))
+        self.root.bind("<k>", lambda (event): self.queue(q.CMD_EXECUTE))
+        self.root.bind("<l>", lambda (event): self.queue(q.CMD_PAUSE))
+        self.root.bind("<j>", lambda (event): self.queue(q.CMD_SWITCH_CAMERA))
         self.root.bind("<space>", lambda (event): self.emergency(2))
-        self.root.bind("<F12>", lambda (event): self.queue(20, []))
+        self.root.bind("<F12>", lambda (event): self.queue(q.CMD_EMERGENCY))
 
     def setup_help(self):
         frame = Frame(self.root)
@@ -150,13 +157,23 @@ class NavGUI:
         label14.grid(row=13)
         frame.grid(row=0, column=1, rowspan=3, sticky="nesw")
 
-
     def emergency(self, times):
         for i in range(times):
-            self.queue(12, [])
-            self.queue(3, [])
-            self.queue(14, [])
+            self.queue(q.CMD_PAUSE)
+            self.queue(q.CMD_CLEAR)
+            self.queue(q.CMD_MANUAL)
+            self.queue(q.CMD_MANUAL_LAND)
             rospy.sleep(0.1)
+
+    def gps_cb(self, req):
+        if not self.origin:
+            self.origin = mavros.msg.InstructionList()
+            self.origin.inst.append(mavros.msg.Instruction())
+            self.origin.inst[0].type = mavros.msg.Instruction.TYPE_ORIGIN
+        self.origin.inst[0].latitude = req.latitude
+        self.origin.inst[0].longitude = req.longitude
+        self.origin.inst[0].altitude = req.relative_altitude
+
 
 # *******************************************************************************
 # Parse any arguments that follow the node command

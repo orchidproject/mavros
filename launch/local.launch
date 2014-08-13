@@ -1,6 +1,8 @@
 <launch>
+        <rosparam file="$(find mavros)/drone_params.yaml" command="load" />
         <include file="$(find mavros)/launch/gui_manual.launch">
-		<arg name="address" value="192.168.1.3" />
+		<arg name="address" value="192.168.1.4" />
  		<arg name="csv_file" value="$(find ar2mav)/map.csv" />
+		<arg name="port" value="57812" />
 	</include>
 </launch>

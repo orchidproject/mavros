@@ -53,6 +53,7 @@ add_message_files(
   CurrentMission.msg
   FilteredPosition.msg
   Instruction.msg
+  InstructionList.msg
   Mavlink_RAW_IMU.msg
   MissionItem.msg
   RC.msg

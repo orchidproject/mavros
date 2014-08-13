@@ -17,12 +17,12 @@ def construct_waypoints_global(n, inst):
         # Starting position should be 50.930042,-1.407951
         lat = [50.9298172, 50.9299545, 50.9299545, 50.9298172]
         lon = [-1.4078220, -1.4078220, -1.4075130, -1.4075130]
-        instructions = list()
+        instructions = mavros.msg.InstructionList()
 
         if inst:
             i = mavros.msg.Instruction()
             i.type = mavros.msg.Instruction.TYPE_TAKEOFF
-            instructions.append(i)
+            instructions.inst.append(i)
 
         i = mavros.msg.Instruction()
         i.type = mavros.msg.Instruction.TYPE_GOTO
@@ -30,7 +30,7 @@ def construct_waypoints_global(n, inst):
         i.latitude = lat[start]
         i.longitude = lon[start]
         i.altitude = 1.5
-        instructions.append(i)
+        instructions.inst.append(i)
         start += inc
 
         i = mavros.msg.Instruction()
@@ -39,17 +39,17 @@ def construct_waypoints_global(n, inst):
         i.latitude = lat[start]
         i.longitude = lon[start]
         i.altitude = 1.5
-        instructions.append(i)
+        instructions.inst.append(i)
         start += inc
 
         if inst:
             i = mavros.msg.Instruction()
             i.type = mavros.msg.Instruction.TYPE_LAND
-            instructions.append(i)
+            instructions.inst.append(i)
 
             i = mavros.msg.Instruction()
             i.type = mavros.msg.Instruction.TYPE_TAKEOFF
-            instructions.append(i)
+            instructions.inst.append(i)
 
         i = mavros.msg.Instruction()
         i.type = mavros.msg.Instruction.TYPE_GOTO
@@ -57,7 +57,7 @@ def construct_waypoints_global(n, inst):
         i.latitude = lat[start]
         i.longitude = lon[start]
         i.altitude = 1.5
-        instructions.append(i)
+        instructions.inst.append(i)
         start += inc
 
         i = mavros.msg.Instruction()
@@ -66,12 +66,12 @@ def construct_waypoints_global(n, inst):
         i.latitude = lat[start]
         i.longitude = lon[start]
         i.altitude = 1.5
-        instructions.append(i)
+        instructions.inst.append(i)
 
         if inst:
             i = mavros.msg.Instruction()
             i.type = mavros.msg.Instruction.TYPE_LAND
-            instructions.append(i)
+            instructions.inst.append(i)
 
         return instructions
 
@@ -86,14 +86,14 @@ def construct_waypoints_local(n, inst):
 
     while not rospy.is_shutdown():
         # Starting position should be 50.930042,-1.407951
-        lat = [3, -6,  0, 6]
-        lon = [4,  0, -8, 0]
-        instructions = list()
+        lat = [0,  5,  5,  0]
+        lon = [5,  5,  0,  0]
+        instructions = mavros.msg.InstructionList()
 
         if inst:
             i = mavros.msg.Instruction()
             i.type = mavros.msg.Instruction.TYPE_TAKEOFF
-            instructions.append(i)
+            instructions.inst.append(i)
 
         i = mavros.msg.Instruction()
         i.type = mavros.msg.Instruction.TYPE_GOTO
@@ -101,7 +101,7 @@ def construct_waypoints_local(n, inst):
         i.latitude = lat[start]
         i.longitude = lon[start]
         i.altitude = 1.5
-        instructions.append(i)
+        instructions.inst.append(i)
         start += inc
 
         i = mavros.msg.Instruction()
@@ -110,17 +110,17 @@ def construct_waypoints_local(n, inst):
         i.latitude = lat[start]
         i.longitude = lon[start]
         i.altitude = 1.5
-        instructions.append(i)
+        instructions.inst.append(i)
         start += inc
 
         if inst:
             i = mavros.msg.Instruction()
             i.type = mavros.msg.Instruction.TYPE_LAND
-            instructions.append(i)
+            instructions.inst.append(i)
 
             i = mavros.msg.Instruction()
             i.type = mavros.msg.Instruction.TYPE_TAKEOFF
-            instructions.append(i)
+            instructions.inst.append(i)
 
         i = mavros.msg.Instruction()
         i.type = mavros.msg.Instruction.TYPE_GOTO
@@ -128,7 +128,7 @@ def construct_waypoints_local(n, inst):
         i.latitude = lat[start]
         i.longitude = lon[start]
         i.altitude = 1.5
-        instructions.append(i)
+        instructions.inst.append(i)
         start += inc
 
         i = mavros.msg.Instruction()
@@ -137,12 +137,12 @@ def construct_waypoints_local(n, inst):
         i.latitude = lat[start]
         i.longitude = lon[start]
         i.altitude = 1.5
-        instructions.append(i)
+        instructions.inst.append(i)
 
         if inst:
             i = mavros.msg.Instruction()
             i.type = mavros.msg.Instruction.TYPE_LAND
-            instructions.append(i)
+            instructions.inst.append(i)
 
         return instructions
 

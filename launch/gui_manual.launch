@@ -1,9 +1,10 @@
 <launch>
-  <arg name="address" default="192.168.1.3"/>
-  <arg name="csv_file" default="$(find ar2mav)/map.csv" />
+  <arg name="address" />
+  <arg name="csv_file"  />
+  <arg name="port"  />
+
   <node pkg="ar2mav" type="arproxy.py" name="arproxy" output="screen" args="-f $(arg csv_file) -l $(arg address) -v 1 -q" />
-  <node ns="apm" pkg="mavros" type="driver.py" name="mavros" output="screen" args="--device=udp:$(arg address):57812">
-  </node>
+  <node ns="apm" pkg="mavros" type="driver.py" name="mavros" output="screen" args="--device=udp:$(arg address):$(arg port)" />
   <node ns="mosaic" pkg="mavros" type="mosaic_node.py" name="mosaic_node" output="screen" />
   <node pkg="mavros" type="nav_gui.py" name="gui" output="screen" />
   <node pkg="ar2mav" type="drone_video" name="drone_video" respawn="false" output="screen">
@@ -12,7 +13,7 @@
 	<param name="buffer_size" value="1048576" />
 	<param name="timeout" value="1" />
 	<param name="topic_name" value="/image/x264" />
-  </node>
+   </node>
   <node pkg="rosbag" type="record" name="rosbag_record" args="-a" />
 </launch>
 
