@@ -75,8 +75,9 @@ class ROSNode:
                 elif rospy.Time.now().to_sec() - self.last_manual > 0.2:
                     self.last_manual = rospy.Time.now().to_sec()
                     self.mav_rc.publish(self.empty_RC)
-            elif self.execute and len(self.queue) > 0:
-                result = True
+            elif self.execute and len(self.queue) > 0 and (self.queue[0].type == mavros.msg.Instruction.TYPE_TAKEOFF or \
+                    self.queue[0].type == mavros.msg.Instruction.TYPE_LAND):
+                result = False
                 for i in range(self.timeouts):
                     if self.queue[0].type == mavros.msg.Instruction.TYPE_TAKEOFF:
                         result = self.mav_cmd(mavros.srv._Command.CommandRequest.CMD_TAKEOFF, 0)
@@ -88,6 +89,9 @@ class ROSNode:
                     rospy.loginfo("UNABLE TO EXECUTE! PAUSING QUEUE...")
                     self.execute = False
                 else:
+                    rospy.sleep(self.queue[0].waitTime)
+                    rospy.loginfo("Dequeued " + str(self.queue[0].type))
+                    self.queue.pop(0)
                     result = False
                     for i in range(self.timeouts):
                         result = self.transmit_waypoints()
@@ -137,9 +141,10 @@ class ROSNode:
         self.last_client = self.last_manual
 
     def update_queue_cb(self, req):
-        if self.state.current < req.current:
+        if self.state.current < req.current or (self.state.current > 0 and req.current == 0):
             rospy.loginfo("Finished a waypoint, dequeuing")
-            self.queue.pop(0)
+            if len(self.queue):
+                self.queue.pop(0)
             self.send -= 1
         self.state = req
 

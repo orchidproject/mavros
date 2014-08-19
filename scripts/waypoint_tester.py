@@ -93,6 +93,8 @@ def construct_waypoints_local(n, inst):
         if inst:
             i = mavros.msg.Instruction()
             i.type = mavros.msg.Instruction.TYPE_TAKEOFF
+            i.waitTime = 5
+            i.frame = mavros.msg.Instruction.FRAME_LOCAL
             instructions.inst.append(i)
 
         i = mavros.msg.Instruction()
@@ -116,10 +118,14 @@ def construct_waypoints_local(n, inst):
         if inst:
             i = mavros.msg.Instruction()
             i.type = mavros.msg.Instruction.TYPE_LAND
+            i.waitTime = 5
+            i.frame = mavros.msg.Instruction.FRAME_LOCAL
             instructions.inst.append(i)
 
             i = mavros.msg.Instruction()
             i.type = mavros.msg.Instruction.TYPE_TAKEOFF
+            i.waitTime = 5
+            i.frame = mavros.msg.Instruction.FRAME_LOCAL
             instructions.inst.append(i)
 
         i = mavros.msg.Instruction()
@@ -142,6 +148,8 @@ def construct_waypoints_local(n, inst):
         if inst:
             i = mavros.msg.Instruction()
             i.type = mavros.msg.Instruction.TYPE_LAND
+            i.waitTime = 5
+            i.frame = mavros.msg.Instruction.FRAME_LOCAL
             instructions.inst.append(i)
 
         return instructions

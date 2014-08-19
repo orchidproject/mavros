@@ -82,7 +82,7 @@ ADHOC_MANUAL = 99
 
 
 class MavRosProxy:
-    def __init__(self, device, baudrate, command_timeout=2, altitude_min=1, altitude_max=10):
+    def __init__(self, device, baudrate, command_timeout=10, altitude_min=1, altitude_max=10):
         self.command_timeout = command_timeout
         self.device = device
         self.baudrate = baudrate
@@ -310,6 +310,9 @@ class MavRosProxy:
         if old == 0:
             self.connection.mav.mission_set_current_send(self.connection.target_system,
                                                          self.connection.target_component, 0)
+        elif self.state.current == 0:
+            self.connection.mav.mission_set_current_send(self.connection.target_system,
+                                                         self.connection.target_component, old+1)
         return True
 
     def transmit_waypoint(self, waypoint):
@@ -349,7 +352,7 @@ class MavRosProxy:
                 self.connection = mavutil.mavlink_connection(self.device, self.baudrate)
                 break
             except error as e:
-                rospy.logerr("[MAVROS]" + str(e))
+                rospy.logerr("[MAVROS]" + str(e) + "|" + str(self.device))
                 rospy.sleep(1)
 
         rospy.loginfo("Waiting for Heartbeat...")

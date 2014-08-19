@@ -98,7 +98,7 @@ class NavGUI:
         frame3.pack(side=BOTTOM)
         main_frame.grid(row=0, column=0, rowspan=3, sticky="nesw")
 
-        red_button = Button(self.root, text="KILL", command=lambda: self.queue(20, []),
+        red_button = Button(self.root, text="KILL", command=lambda: self.queue(q.CMD_EMERGENCY),
                             font=self.font, height=2, width=10, bg="red")
         red_button.grid(row=1, column=2, sticky="nesw")
 
@@ -118,7 +118,7 @@ class NavGUI:
         self.root.bind("<r>", lambda (event): self.queue(q.CMD_MANUAL_TAKEOFF))
         self.root.bind("<f>", lambda (event): self.queue(q.CMD_MANUAL_LAND))
         self.root.bind("<c>", lambda (event): self.queue(q.CMD_CLEAR))
-        self.root.bind("<v>", lambda (event): self.inst.publish(construct_waypoints_local(1, False)))
+        self.root.bind("<v>", lambda (event): self.inst.publish(construct_waypoints_local(1, True)))
         self.root.bind("<k>", lambda (event): self.queue(q.CMD_EXECUTE))
         self.root.bind("<l>", lambda (event): self.queue(q.CMD_PAUSE))
         self.root.bind("<j>", lambda (event): self.queue(q.CMD_SWITCH_CAMERA))
@@ -161,7 +161,6 @@ class NavGUI:
         for i in range(times):
             self.queue(q.CMD_PAUSE)
             self.queue(q.CMD_CLEAR)
-            self.queue(q.CMD_MANUAL)
             self.queue(q.CMD_MANUAL_LAND)
             rospy.sleep(0.1)
 
