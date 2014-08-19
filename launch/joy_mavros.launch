@@ -1,12 +1,14 @@
 <launch>
-  <arg name="address" />
-  <arg name="csv_file"  />
-  <arg name="port"  />
+  <arg name="address" default="192.168.1.2"/>
+  <arg name="csv_file" default="$(find ar2mav)/map.csv" />
+  <arg name="port"  default="57812" />
+  <rosparam file="$(find mavros)/drone_params.yaml" command="load" />
+  <rosparam file="$(find ar2mav)/drones.yaml" command="load" />
 
   <node pkg="ar2mav" type="arproxy.py" name="arproxy" output="screen" args="-f $(arg csv_file) -l $(arg address) -v 1 -q" />
   <node ns="apm" pkg="mavros" type="driver.py" name="mavros" output="screen" args="--device=udp:$(arg address):$(arg port)" />
   <node ns="mosaic" pkg="mavros" type="mosaic_node.py" name="mosaic_node" output="screen" />
-  <include file="$(find mavros)/launch/joy.launch />
+  <include file="$(find mavros)/launch/joy.launch" />
   <node pkg="ar2mav" type="drone_video" name="drone_video" respawn="false" output="screen">
 	<param name="drone_ip" value="192.168.1.1" />
 	<param name="drone_port" value="5555" />
@@ -14,7 +16,5 @@
 	<param name="timeout" value="1" />
 	<param name="topic_name" value="/image/x264" />
   </node>
-  <node pkg="image_transport" type="republish" name="publisher" args="in:=/image x264 out:=/republished/image" />
-  <node pkg="image_view" type="image_view" name="viewer" args="image:=/republished/image compressed"/>
   <node pkg="rosbag" type="record" name="rosbag_record" args="-a" />
 </launch>

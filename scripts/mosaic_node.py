@@ -19,7 +19,7 @@ CMD_EMERGENCY = 100
 
 
 class ROSNode:
-    def __init__(self, prefix, timeouts=3, client_timeout=30):
+    def __init__(self, prefix, timeouts=1, client_timeout=30):
         self.prefix = prefix
         self.execute = False
         self.manual = False
