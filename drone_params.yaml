@@ -14,3 +14,5 @@ drone_params: {
 'CAM-RECORD_HORI': 0.0
 }
 
+drones_active: ['Parrot']
+

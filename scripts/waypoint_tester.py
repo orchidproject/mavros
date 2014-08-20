@@ -158,25 +158,25 @@ def construct_waypoints_local(n, inst):
 # *******************************************************************************
 # Parse any arguments that follow the node command
 # *******************************************************************************
-from optparse import OptionParser
-
-parser = OptionParser("mosaic_node.py [options]")
-parser.add_option("-n", "--number", dest="n", default=1,
-                  help="Number of drone")
-parser.add_option("-i", "--instructions", action="store_true", dest="instructions", default=False,
-                  help="Using Landing/Takeoff instructions")
-(opts, args) = parser.parse_args()
-
-if __name__ == '__main__':
-    try:
-        rospy.wait_for_service('/mosaic/queue')
-        queue = rospy.ServiceProxy('/mosaic/queue', mavros.srv.Queue)
-        wps = construct_waypoints_global(opts.n, opts.instructions)
-        resp = queue(1, wps)
-        print("Waypoints Sent. Response: " + str(resp.result))
-        rospy.sleep(1)
-        resp = queue(4, [])
-        print("Execute Response: " + str(resp.result))
-
-    except rospy.ROSInterruptException:
-        pass
+# from optparse import OptionParser
+#
+# parser = OptionParser("mosaic_node.py [options]")
+# parser.add_option("-n", "--number", dest="n", default=1,
+#                   help="Number of drone")
+# parser.add_option("-i", "--instructions", action="store_true", dest="instructions", default=False,
+#                   help="Using Landing/Takeoff instructions")
+# (opts, args) = parser.parse_args()
+#
+# if __name__ == '__main__':
+#     try:
+#         rospy.wait_for_service('/mosaic/queue')
+#         queue = rospy.ServiceProxy('/mosaic/queue', mavros.srv.Queue)
+#         wps = construct_waypoints_global(opts.n, opts.instructions)
+#         resp = queue(1, wps)
+#         print("Waypoints Sent. Response: " + str(resp.result))
+#         rospy.sleep(1)
+#         resp = queue(4, [])
+#         print("Execute Response: " + str(resp.result))
+#
+#     except rospy.ROSInterruptException:
+#         pass

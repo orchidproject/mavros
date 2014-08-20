@@ -1,0 +1,34 @@
+<launch>
+  <arg name="address" default="192.168.10.102" />
+  <arg name="file" default="$(find ar2mav)/drones.yaml"/>
+
+  <rosparam file="$(find mavros)/drone_params.yaml" command="load" />
+  <rosparam file="$(arg file)" command="load" />
+
+  <node pkg="ar2mav" type="arproxy.py" name="arproxy" output="screen" args="-f $(arg file) -l $(arg address) -v 1 -q" />
+
+  <node pkg="mavros" type="driver.py" name="mavros_parrot" output="screen" args="-n Parrot -l $(arg address) -r" />
+  <node pkg="mavros" type="driver.py" name="mavros_polly" output="screen" args="-n Polly -l $(arg address) -r" />
+  <node pkg="mavros" type="driver.py" name="mavros_charlie" output="screen" args="-n Charlie -l $(arg address) -r" />
+  <node pkg="mavros" type="driver.py" name="mavros_tweety" output="screen" args="-n Tweety -l $(arg address) -r" />
+  <node pkg="mavros" type="driver.py" name="mavros_kevin" output="screen" args="-n Kevin -l $(arg address) -r" />
+  <node pkg="mavros" type="driver.py" name="mavros_iago" output="screen" args="-n Iago -l $(arg address) -r" />
+
+  <node pkg="mavros" type="queue_node.py" name="queue_parrot" output="screen" args="-n Parrot -r" />
+  <node pkg="mavros" type="queue_node.py" name="queue_polly" output="screen" args="-n Polly -r" />
+  <node pkg="mavros" type="queue_node.py" name="queue_charlie" output="screen" args="-n Charlie -r" />
+  <node pkg="mavros" type="queue_node.py" name="queue_tweety" output="screen" args="-n Tweety -r" />
+  <node pkg="mavros" type="queue_node.py" name="queue_kevin" output="screen" args="-n Kevin -r" />
+  <node pkg="mavros" type="queue_node.py" name="queue_iago" output="screen" args="-n Iago -r" />
+ 
+  <node pkg="mavros" type="nav_gui.py" name="gui_parrot" output="screen" args="-n Parrot -r" />
+  <node pkg="mavros" type="nav_gui.py" name="gui_polly" output="screen" args="-n Polly -r" />
+  <node pkg="mavros" type="nav_gui.py" name="gui_charlie" output="screen" args="-n Charlie -r" />
+  <node pkg="mavros" type="nav_gui.py" name="gui_tweety" output="screen" args="-n Tweety -r" />
+  <node pkg="mavros" type="nav_gui.py" name="gui_kevin" output="screen" args="-n Kevin -r" />
+  <node pkg="mavros" type="nav_gui.py" name="gui_iago" output="screen" args="-n Iago -r" />
+
+  <node pkg="rosbag" type="record" name="rosbag_record" args="-a" />
+</launch>
+
+
