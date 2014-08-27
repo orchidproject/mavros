@@ -1,9 +1,10 @@
 #!/usr/bin/env python
 import rospy
-import mavros.msg
+from mavros.msg import Instruction, InstructionList
 import mavros.srv
 from utm import from_latlon, to_latlon
 from geometry_msgs.msg import Vector3Stamped
+from uav_utils import sweeps
 
 CAMERA_PARAMETER = "CAM-RECORD_HORI"
 
@@ -29,9 +30,10 @@ class QueueNode:
         self.client_timeout = client_timeout
         self.send = 0
         self.origin = None
+        self.sending = False
         # self.current = 0
         # self.last = 0
-        #self.send = 0
+        # self.send = 0
         self.timeouts = timeouts
         self.queue = list()
         self.state = mavros.msg.State()
@@ -39,7 +41,7 @@ class QueueNode:
         self.mav_wps = rospy.ServiceProxy(self.prefix + "waypoints", mavros.srv.SendWaypoints)
         self.mav_params = rospy.ServiceProxy(self.prefix + "params", mavros.srv.Parameters)
         self.mav_rc = rospy.Publisher(self.prefix + 'send_rc', mavros.msg.RC, queue_size=10)
-        self.next_pub = rospy.Publisher(self.prefix + 'queue/next_instruction', mavros.msg.Instruction, queue_size=10)
+        self.next_pub = rospy.Publisher(self.prefix + 'queue/next_instruction', Instruction, queue_size=10)
         self.state_pub = rospy.Publisher(self.prefix + 'queue/state', mavros.msg.State, queue_size=10)
         self.umt_pub = rospy.Publisher(self.prefix + "queue/utm_pos", Vector3Stamped, queue_size=10)
         self.params = dict()
@@ -56,7 +58,7 @@ class QueueNode:
         rospy.Service(self.prefix + "queue/cmd", mavros.srv.Queue, self.queue_cb)
         rospy.Subscriber(self.prefix + "queue/velocity", mavros.msg.Velocity, self.velocity_cb)
         rospy.Subscriber(self.prefix + "state", mavros.msg.State, self.update_queue_cb)
-        rospy.Subscriber(self.prefix + "queue/instructions", mavros.msg.InstructionList, self.instructions_cb)
+        rospy.Subscriber(self.prefix + "queue/instructions", InstructionList, self.instructions_cb)
         rospy.loginfo("[QUEUE:%s]Parameters received, Queue is ready." % self.name)
         for i in range(len(params.names)):
             self.params[params.names[i]] = params.values[i]
@@ -73,13 +75,14 @@ class QueueNode:
                 elif rospy.Time.now().to_sec() - self.last_manual > 0.2:
                     self.last_manual = rospy.Time.now().to_sec()
                     self.mav_rc.publish(self.empty_RC)
-            elif self.execute and len(self.queue) > 0 and (self.queue[0].type == mavros.msg.Instruction.TYPE_TAKEOFF or \
-                    self.queue[0].type == mavros.msg.Instruction.TYPE_LAND):
+            elif self.execute and len(self.queue) > 0 and (self.queue[0].type == Instruction.TYPE_TAKEOFF or \
+                                                                       self.queue[0].type == Instruction.TYPE_LAND):
+                print "*****************"
                 result = False
                 for i in range(self.timeouts):
-                    if self.queue[0].type == mavros.msg.Instruction.TYPE_TAKEOFF:
+                    if self.queue[0].type == Instruction.TYPE_TAKEOFF:
                         result = self.mav_cmd(mavros.srv._Command.CommandRequest.CMD_TAKEOFF, 0)
-                    elif self.queue[0].type == mavros.msg.Instruction.TYPE_LAND:
+                    elif self.queue[0].type == Instruction.TYPE_LAND:
                         result = self.mav_cmd(mavros.srv._Command.CommandRequest.CMD_LAND, 0)
                     if result:
                         break
@@ -98,8 +101,12 @@ class QueueNode:
                     if not result:
                         rospy.loginfo("[QUEUE:%s]UNABLE TO TRANSMIT! PAUSING QUEUE..." % self.name)
                         self.execute = False
+            elif self.execute:
+                if not self.transmit_waypoints():
+                    rospy.loginfo("[QUEUE:%s]UNABLE TO TRANSMIT! PAUSING QUEUE..." % self.name)
+                    self.execute = False
             if len(self.queue) == 0:
-                next_instruction = mavros.msg.Instruction()
+                next_instruction = Instruction()
             else:
                 next_instruction = self.queue[0]
             if len(self.queue) > 0:
@@ -139,30 +146,69 @@ class QueueNode:
         self.last_client = self.last_manual
 
     def update_queue_cb(self, req):
-        if self.state.current < req.current or (self.state.current > 0 and req.current == 0):
-            rospy.loginfo("[QUEUE:%s]Finished a waypoint, de queuing" % self.name)
-            if len(self.queue):
+        if not self.sending:
+            if self.state.current < req.current:
+                if self.state.current == 0:
+                    self.state.current = 1
+                while self.state.current < req.current:
+                    if len(self.queue):
+                        rospy.loginfo("[QUEUE:%s]De queued %s" % (self.name, str(self.queue[0].type)))
+                        self.queue.pop(0)
+                        self.send -= 1
+                    self.state.current += 1
+            elif req.current == 0 and ((self.state.current + 1) == req.missions):
+                rospy.loginfo("[QUEUE:%s]De queued %s" % (self.name, str(self.queue[0].type)))
                 self.queue.pop(0)
-            self.send -= 1
-        self.state = req
+                self.send -= 1
+                self.state.current = req.current
 
     def instructions_cb(self, req):
-        if len(req.inst) > 0 and req.inst[0].type == mavros.msg.Instruction.TYPE_ORIGIN:
-            self.origin = from_latlon(req.inst[0].latitude, req.inst[0].longitude)
-            rospy.loginfo("[QUEUE:%s]Origin set to " % (self.name, str(self.origin)))
-        else:
-            rospy.loginfo("[QUEUE:%s]Adding %d instructions to the queue." % (self.name, len(req.inst)))
-            for i in req.inst:
-                if (i.frame == mavros.msg.Instruction.FRAME_LOCAL and self.origin) or \
-                                  i.frame == mavros.msg.Instruction.FRAME_GLOBAL:
-                    self.queue.append(i)
+        rospy.loginfo("[QUEUE:%s] Adding %d instruction" % (self.name, len(req.inst)))
+        while len(req.inst) > 0:
+            head = req.inst.pop(0)
+            if head.type == Instruction.TYPE_SET_ORIGIN:
+                self.origin = from_latlon(head.latitude, head.longitude)
+                print head.latitude, ":", head.longitude
+                rospy.loginfo("[QUEUE:%s]Origin set to %s" % (self.name, str(self.origin)))
+            elif head.type == Instruction.TYPE_SPIRAL_SWEEP or head.type == Instruction.TYPE_RECT_SWEEP:
+                if len(req.inst) < 1 or (req.inst[0].type != Instruction.TYPE_SPIRAL_SWEEP and req.inst[0].type != Instruction.TYPE_RECT_SWEEP):
+                    rospy.loginfo("[QUEUE:%s]Require start and end point of sweep to be after another" % self.name)
+                elif head.frame != Instruction.FRAME_LOCAL or not self.origin:
+                    rospy.loginfo("[QUEUE:%s]Sweeps can't be in global frame or have not set up origin" % self.name)
+                    return
                 else:
-                    rospy.loginfo("[QUEUE:%s]Don't accept UTM coordinates without setting origin or wrong FRAME" % self.name)
+                    end = req.inst.pop(0)
+                    points = list()
+                    if head.type == Instruction.TYPE_SPIRAL_SWEEP:
+                        points = sweeps.spiral_sweep((head.latitude, head.longitude), (end.latitude, end.longitude),
+                                                     head.waitTime, head.range)
+                    elif head.type == Instruction.TYPE_RECT_SWEEP:
+                        points = sweeps.rect_sweep((head.latitude, head.longitude), (end.latitude, end.longitude),
+                                                   head.waitTime, head.range)
+                    n = len(points)
+                    rospy.loginfo("[QUEUE:%s]Adding %d instructions for sweep" % (self.name, n))
+                    for i in range(n):
+                        temp = Instruction()
+                        temp.type = Instruction.TYPE_GOTO
+                        temp.frame = Instruction.FRAME_LOCAL
+                        temp.waitTime = end.waitTime if (i == (n-1)) else 0
+                        temp.range = end.range
+                        temp.latitude = points[i][0]
+                        temp.longitude = points[i][1]
+                        temp.altitude = head.altitude + i * (head.altitude - end.altitude) / (n-1)
+                        self.queue.append(temp)
+            elif head.type == Instruction.TYPE_GOTO:
+                if head.frame == Instruction.FRAME_LOCAL and not self.origin:
+                    rospy.loginfo("[QUEUE:%s]Don't accept UTM coordinates without setting origin" % self.name)
+                elif head.frame == Instruction.FRAME_LOCAL or head.frame == Instruction.FRAME_GLOBAL:
+                    self.queue.append(head)
+            elif head.type == Instruction.TYPE_LAND or Instruction.TYPE_TAKEOFF:
+                self.queue.append(head)
 
     def umt_translate_cb(self, msg):
         (x, y, zone_n, zone_l) = from_latlon(msg.latitude, msg.longitude)
         if self.origin and zone_n == self.origin[2] and zone_l == self.origin[3]:
-            self.vector.header.stamp = rospy.Time.now()
+            self.vector.header.stamp = msg.header.stamp
             self.vector.x = x - self.origin[0]
             self.vector.y = y - self.origin[1]
             self.vector.z = msg.altitude
@@ -224,7 +270,7 @@ class QueueNode:
             else:
                 return False
         elif req.command == CMD_MANUAL_TAKEOFF:
-            #if not self.manual:
+            # if not self.manual:
             #    return False
             result = False
             for i in range(self.timeouts):
@@ -233,7 +279,7 @@ class QueueNode:
                     break
             return result
         elif req.command == CMD_MANUAL_LAND:
-            #if not self.manual:
+            # if not self.manual:
             #    return False
             result = False
             for i in range(self.timeouts):
@@ -258,10 +304,10 @@ class QueueNode:
     def transmit_waypoints(self):
         waypoints = list()
         for i in range(self.send, len(self.queue)):
-            if self.queue[i].type != mavros.msg.Instruction.TYPE_GOTO:
+            if self.queue[i].type != Instruction.TYPE_GOTO:
                 break
             waypoint_msg = mavros.msg.Waypoint()
-            if self.queue[i].frame == mavros.msg.Instruction.FRAME_LOCAL:
+            if self.queue[i].frame == Instruction.FRAME_LOCAL:
                 #print "LOCAL(%.2f,%.2f)" % (self.queue[i].latitude, self.queue[i].longitude)
                 waypoint_msg.latitude, waypoint_msg.longitude = to_latlon(self.queue[i].latitude + self.origin[0],
                                                                           self.queue[i].longitude + self.origin[1],
@@ -278,10 +324,13 @@ class QueueNode:
             waypoint_msg.params = [self.queue[i].waitTime, self.queue[i].range, 0, 0]
             waypoints.append(waypoint_msg)
         if len(waypoints) > 0:
+            self.sending = True
             if self.mav_wps(waypoints).result:
                 self.send += len(waypoints)
+                self.sending = False
                 return True
             else:
+                self.sending = False
                 return False
         return True
 

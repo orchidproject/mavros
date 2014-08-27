@@ -10,7 +10,9 @@ float64 altitude
 uint8 TYPE_LAND = 1
 uint8 TYPE_TAKEOFF = 2
 uint8 TYPE_GOTO = 3
-uint8 TYPE_ORIGIN = 10
+uint8 TYPE_SPIRAL_SWEEP = 5
+uint8 TYPE_RECT_SWEEP = 6
+uint8 TYPE_SET_ORIGIN = 10
 
 uint8 FRAME_GLOBAL = 1
 uint8 FRAME_LOCAL = 2

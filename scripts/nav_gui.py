@@ -6,11 +6,13 @@ import rospy
 import mavros.msg
 import mavros.srv
 import queue_node as q
-from waypoint_tester import construct_waypoints_global, construct_waypoints_local
+from waypoint_tester import *
+import uav_utils.sweeps as sweep
 
 
 class NavGUI:
-    def __init__(self, name):
+    def __init__(self, name, command_switch=False):
+        self.command_switch = command_switch
         self.root = Tk()
         self.root.title("AR Drone: " + name)
         self.font = tkFont.Font(family="Helvetica", size=15)
@@ -25,7 +27,8 @@ class NavGUI:
         self.manual = rospy.Publisher(self.prefix + "queue/velocity", mavros.msg.Velocity, queue_size=1000)
         self.inst = rospy.Publisher(self.prefix + "queue/instructions", mavros.msg.InstructionList, queue_size=100)
         for name in rospy.get_param("/drones_active"):
-            self.all[0].append(rospy.Publisher("/" + name + "/queue/instructions", mavros.msg.InstructionList, queue_size=100))
+            self.all[0].append(
+                rospy.Publisher("/" + name + "/queue/instructions", mavros.msg.InstructionList, queue_size=100))
             self.all[1].append(rospy.ServiceProxy("/" + name + "/queue/cmd", mavros.srv.Queue))
         self.queue = rospy.ServiceProxy(self.prefix + "queue/cmd", mavros.srv.Queue)
         rospy.Subscriber(self.prefix + "filtered_pos", mavros.msg.FilteredPosition, self.gps_cb)
@@ -41,6 +44,7 @@ class NavGUI:
         frame2 = Frame(main_frame)
         frame3 = Frame(main_frame)
         frame4 = Frame(main_frame)
+        frame5 = Frame(main_frame)
 
         info1 = Label(control_frame, text="Roll/Pitch", font=self.font)
         info1.grid(row=1, column=1)
@@ -78,17 +82,24 @@ class NavGUI:
         land = Button(frame2, text="Land", command=lambda: self.queue(q.CMD_MANUAL_LAND), font=self.font)
         land.pack(side=RIGHT)
 
-        send = Button(frame3, text="Send Waypoints",
-                      command=lambda: self.inst.publish(construct_waypoints_global(1, False)), font=self.font)
+        spiral = Button(frame3, text="Spiral Sweep", command=lambda: self.inst.publish(construct_spiral_sweep(self.command_switch)),
+                        font=self.font)
+        spiral.pack(side=LEFT)
+        rect = Button(frame3, text="Rectangular Sweep", command=lambda: self.inst.publish(construct_rect_sweep(self.command_switch)),
+                        font=self.font)
+        rect.pack(side=RIGHT)
+
+        send = Button(frame4, text="Send GLOBAL Waypoints",
+                      command=lambda: self.inst.publish(construct_waypoints_global(1, self.command_switch)), font=self.font)
         send.pack(side=LEFT)
-        clear = Button(frame3, text="Clear Waypoints", command=lambda: self.queue(q.CMD_CLEAR), font=self.font)
+        clear = Button(frame4, text="Clear", command=lambda: self.queue(q.CMD_CLEAR), font=self.font)
         clear.pack(side=RIGHT)
 
-        run = Button(frame4, text="Execute", command=lambda: self.queue(q.CMD_EXECUTE), font=self.font)
+        run = Button(frame5, text="Execute", command=lambda: self.queue(q.CMD_EXECUTE), font=self.font)
         run.pack(side=LEFT)
-        pause = Button(frame4, text="Pause", command=lambda: self.queue(q.CMD_PAUSE), font=self.font)
+        pause = Button(frame5, text="Pause", command=lambda: self.queue(q.CMD_PAUSE), font=self.font)
         pause.pack(side=LEFT)
-        origin = Button(frame4, text="Set Origin", command=lambda: self.set_origin(), font=self.font)
+        origin = Button(frame5, text="Set Origin", command=lambda: self.set_origin(), font=self.font)
         origin.pack(side=RIGHT)
 
         emergency = Button(main_frame, text="Emergency Land", command=lambda: self.emergency(2), font=self.font)
@@ -97,6 +108,7 @@ class NavGUI:
         control_frame.pack()
         frame1.pack(side=TOP)
         frame2.pack(side=TOP)
+        frame5.pack(side=BOTTOM)
         frame4.pack(side=BOTTOM)
         frame3.pack(side=BOTTOM)
         main_frame.grid(row=0, column=0, rowspan=3, sticky="nesw")
@@ -105,7 +117,7 @@ class NavGUI:
                             font=self.font, height=2, width=10, bg="red")
         red_button.grid(row=0, column=2, sticky="nesw")
         red_button_all = Button(self.root, text="KILL ALL", command=lambda: self.kill_all(),
-                            font=self.font, height=2, width=10, bg="red")
+                                font=self.font, height=2, width=10, bg="red")
         red_button_all.grid(row=2, column=2, sticky="nesw")
 
     def setup_keyboard(self):
@@ -124,7 +136,7 @@ class NavGUI:
         self.root.bind("<r>", lambda (event): self.queue(q.CMD_MANUAL_TAKEOFF))
         self.root.bind("<f>", lambda (event): self.queue(q.CMD_MANUAL_LAND))
         self.root.bind("<c>", lambda (event): self.queue(q.CMD_CLEAR))
-        self.root.bind("<v>", lambda (event): self.inst.publish(construct_waypoints_local(1, True)))
+        self.root.bind("<v>", lambda (event): self.inst.publish(construct_waypoints_local(1, self.command_switch)))
         self.root.bind("<k>", lambda (event): self.queue(q.CMD_EXECUTE))
         self.root.bind("<l>", lambda (event): self.queue(q.CMD_PAUSE))
         self.root.bind("<j>", lambda (event): self.queue(q.CMD_SWITCH_CAMERA))
@@ -152,7 +164,7 @@ class NavGUI:
         label8.grid(row=7)
         label9 = Label(frame, text="Clear Waypoints - C", font=self.font)
         label9.grid(row=8)
-        label10 = Label(frame, text="Send waypoints - V", font=self.font)
+        label10 = Label(frame, text="Send LOCAL waypoints - V", font=self.font)
         label10.grid(row=9)
         label11 = Label(frame, text="Execute - K", font=self.font)
         label11.grid(row=10)
@@ -190,7 +202,7 @@ class NavGUI:
         if not self.origin:
             self.origin = mavros.msg.InstructionList()
             self.origin.inst.append(mavros.msg.Instruction())
-            self.origin.inst[0].type = mavros.msg.Instruction.TYPE_ORIGIN
+            self.origin.inst[0].type = mavros.msg.Instruction.TYPE_SET_ORIGIN
         self.origin.inst[0].latitude = req.latitude
         self.origin.inst[0].longitude = req.longitude
         self.origin.inst[0].altitude = req.relative_altitude
@@ -204,6 +216,8 @@ from optparse import OptionParser
 parser = OptionParser("mosaic_node.py [options]")
 parser.add_option("-n", "--name", dest="name", default="parrot",
                   help="Name of the prefix for the mavros node")
+parser.add_option("-c", "--commands", action="store_true", dest="command_switch", default=False,
+                  help="Should we have the command switch on the waypoint_tester")
 parser.add_option("-r", "--ros", action="store_true", dest="ros", help="Use ROS parameter server", default=False)
 (opts, args) = parser.parse_args()
 
@@ -212,7 +226,7 @@ if __name__ == '__main__':
         if not opts.ros or opts.name in rospy.get_param("/drones_active"):
             rospy.wait_for_service("/" + opts.name + "/queue/cmd")
             rospy.init_node("nav_gui")
-            gui = NavGUI(opts.name)
+            gui = NavGUI(opts.name, opts.command_switch)
             gui.start()
     except rospy.ROSInterruptException:
         gui.root.quit()

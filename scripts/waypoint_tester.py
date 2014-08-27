@@ -5,7 +5,7 @@ import mavros.srv
 import sys
 
 
-def construct_waypoints_global(n, inst):
+def construct_waypoints_global(n, command_switch):
     if n == 1:
         start = 0
         inc = 1
@@ -19,7 +19,7 @@ def construct_waypoints_global(n, inst):
         lon = [-1.4078220, -1.4078220, -1.4075130, -1.4075130]
         instructions = mavros.msg.InstructionList()
 
-        if inst:
+        if command_switch:
             i = mavros.msg.Instruction()
             i.type = mavros.msg.Instruction.TYPE_TAKEOFF
             instructions.inst.append(i)
@@ -42,7 +42,7 @@ def construct_waypoints_global(n, inst):
         instructions.inst.append(i)
         start += inc
 
-        if inst:
+        if command_switch:
             i = mavros.msg.Instruction()
             i.type = mavros.msg.Instruction.TYPE_LAND
             instructions.inst.append(i)
@@ -68,7 +68,7 @@ def construct_waypoints_global(n, inst):
         i.altitude = 1.5
         instructions.inst.append(i)
 
-        if inst:
+        if command_switch:
             i = mavros.msg.Instruction()
             i.type = mavros.msg.Instruction.TYPE_LAND
             instructions.inst.append(i)
@@ -76,7 +76,7 @@ def construct_waypoints_global(n, inst):
         return instructions
 
 
-def construct_waypoints_local(n, inst):
+def construct_waypoints_local(n, command_switch):
     if n == 1:
         start = 0
         inc = 1
@@ -84,75 +84,149 @@ def construct_waypoints_local(n, inst):
         start = 3
         inc = -1
 
-    while not rospy.is_shutdown():
-        # Starting position should be 50.930042,-1.407951
-        lat = [0,  5,  5,  0]
-        lon = [5,  5,  0,  0]
-        instructions = mavros.msg.InstructionList()
+    lat = [0,  5,  5,  0]
+    lon = [5,  5,  0,  0]
+    instructions = mavros.msg.InstructionList()
 
-        if inst:
-            i = mavros.msg.Instruction()
-            i.type = mavros.msg.Instruction.TYPE_TAKEOFF
-            i.waitTime = 5
-            i.frame = mavros.msg.Instruction.FRAME_LOCAL
-            instructions.inst.append(i)
-
+    if command_switch:
         i = mavros.msg.Instruction()
-        i.type = mavros.msg.Instruction.TYPE_GOTO
+        i.type = mavros.msg.Instruction.TYPE_TAKEOFF
+        i.waitTime = 5
         i.frame = mavros.msg.Instruction.FRAME_LOCAL
-        i.latitude = lat[start]
-        i.longitude = lon[start]
-        i.altitude = 1.5
-        instructions.inst.append(i)
-        start += inc
-
-        i = mavros.msg.Instruction()
-        i.type = mavros.msg.Instruction.TYPE_GOTO
-        i.frame = mavros.msg.Instruction.FRAME_LOCAL
-        i.latitude = lat[start]
-        i.longitude = lon[start]
-        i.altitude = 1.5
-        instructions.inst.append(i)
-        start += inc
-
-        if inst:
-            i = mavros.msg.Instruction()
-            i.type = mavros.msg.Instruction.TYPE_LAND
-            i.waitTime = 5
-            i.frame = mavros.msg.Instruction.FRAME_LOCAL
-            instructions.inst.append(i)
-
-            i = mavros.msg.Instruction()
-            i.type = mavros.msg.Instruction.TYPE_TAKEOFF
-            i.waitTime = 5
-            i.frame = mavros.msg.Instruction.FRAME_LOCAL
-            instructions.inst.append(i)
-
-        i = mavros.msg.Instruction()
-        i.type = mavros.msg.Instruction.TYPE_GOTO
-        i.frame = mavros.msg.Instruction.FRAME_LOCAL
-        i.latitude = lat[start]
-        i.longitude = lon[start]
-        i.altitude = 1.5
-        instructions.inst.append(i)
-        start += inc
-
-        i = mavros.msg.Instruction()
-        i.type = mavros.msg.Instruction.TYPE_GOTO
-        i.frame = mavros.msg.Instruction.FRAME_LOCAL
-        i.latitude = lat[start]
-        i.longitude = lon[start]
-        i.altitude = 1.5
         instructions.inst.append(i)
 
-        if inst:
-            i = mavros.msg.Instruction()
-            i.type = mavros.msg.Instruction.TYPE_LAND
-            i.waitTime = 5
-            i.frame = mavros.msg.Instruction.FRAME_LOCAL
-            instructions.inst.append(i)
+    i = mavros.msg.Instruction()
+    i.type = mavros.msg.Instruction.TYPE_GOTO
+    i.frame = mavros.msg.Instruction.FRAME_LOCAL
+    i.latitude = lat[start]
+    i.longitude = lon[start]
+    i.altitude = 1.5
+    instructions.inst.append(i)
+    start += inc
 
-        return instructions
+    i = mavros.msg.Instruction()
+    i.type = mavros.msg.Instruction.TYPE_GOTO
+    i.frame = mavros.msg.Instruction.FRAME_LOCAL
+    i.latitude = lat[start]
+    i.longitude = lon[start]
+    i.altitude = 1.5
+    instructions.inst.append(i)
+    start += inc
+
+    if command_switch:
+        i = mavros.msg.Instruction()
+        i.type = mavros.msg.Instruction.TYPE_LAND
+        i.waitTime = 5
+        i.frame = mavros.msg.Instruction.FRAME_LOCAL
+        instructions.inst.append(i)
+
+        i = mavros.msg.Instruction()
+        i.type = mavros.msg.Instruction.TYPE_TAKEOFF
+        i.waitTime = 5
+        i.frame = mavros.msg.Instruction.FRAME_LOCAL
+        instructions.inst.append(i)
+
+    i = mavros.msg.Instruction()
+    i.type = mavros.msg.Instruction.TYPE_GOTO
+    i.frame = mavros.msg.Instruction.FRAME_LOCAL
+    i.latitude = lat[start]
+    i.longitude = lon[start]
+    i.altitude = 1.5
+    instructions.inst.append(i)
+    start += inc
+
+    i = mavros.msg.Instruction()
+    i.type = mavros.msg.Instruction.TYPE_GOTO
+    i.frame = mavros.msg.Instruction.FRAME_LOCAL
+    i.latitude = lat[start]
+    i.longitude = lon[start]
+    i.altitude = 1.5
+    instructions.inst.append(i)
+
+    if command_switch:
+        i = mavros.msg.Instruction()
+        i.type = mavros.msg.Instruction.TYPE_LAND
+        i.waitTime = 5
+        i.frame = mavros.msg.Instruction.FRAME_LOCAL
+        instructions.inst.append(i)
+
+    return instructions
+
+
+def construct_spiral_sweep(command_switch):
+    instructions = mavros.msg.InstructionList()
+
+    if command_switch:
+        i = mavros.msg.Instruction()
+        i.type = mavros.msg.Instruction.TYPE_TAKEOFF
+        i.waitTime = 5
+        instructions.inst.append(i)
+
+    i = mavros.msg.Instruction()
+    i.type = mavros.msg.Instruction.TYPE_SPIRAL_SWEEP
+    i.frame = mavros.msg.Instruction.FRAME_LOCAL
+    i.waitTime = 2
+    i.range = 5
+    i.latitude = 16
+    i.longitude = 16
+    i.altitude = 1.5
+    instructions.inst.append(i)
+
+    i = mavros.msg.Instruction()
+    i.type = mavros.msg.Instruction.TYPE_SPIRAL_SWEEP
+    i.frame = mavros.msg.Instruction.FRAME_LOCAL
+    i.waitTime = 5
+    i.range = 0.5
+    i.latitude = 8
+    i.longitude = 8
+    i.altitude = 1.5
+    instructions.inst.append(i)
+
+    if command_switch:
+        i = mavros.msg.Instruction()
+        i.type = mavros.msg.Instruction.TYPE_LAND
+        i.waitTime = 0
+        instructions.inst.append(i)
+
+    return instructions
+
+
+def construct_rect_sweep(command_switch):
+    instructions = mavros.msg.InstructionList()
+
+    if command_switch:
+        i = mavros.msg.Instruction()
+        i.type = mavros.msg.Instruction.TYPE_TAKEOFF
+        i.waitTime = 5
+        instructions.inst.append(i)
+
+    i = mavros.msg.Instruction()
+    i.type = mavros.msg.Instruction.TYPE_RECT_SWEEP
+    i.frame = mavros.msg.Instruction.FRAME_LOCAL
+    i.waitTime = 2
+    i.range = 5
+    i.latitude = 2
+    i.longitude = 2
+    i.altitude = 1.5
+    instructions.inst.append(i)
+
+    i = mavros.msg.Instruction()
+    i.type = mavros.msg.Instruction.TYPE_RECT_SWEEP
+    i.frame = mavros.msg.Instruction.FRAME_LOCAL
+    i.waitTime = 5
+    i.range = 0.5
+    i.latitude = 12
+    i.longitude = 12
+    i.altitude = 1.5
+    instructions.inst.append(i)
+
+    if command_switch:
+        i = mavros.msg.Instruction()
+        i.type = mavros.msg.Instruction.TYPE_LAND
+        i.waitTime = 0
+        instructions.inst.append(i)
+
+    return instructions
 
 
 # *******************************************************************************
