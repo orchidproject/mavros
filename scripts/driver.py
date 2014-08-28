@@ -478,7 +478,7 @@ class MavRosProxy:
                     self.connection.param_fetch_complete = True
                     self.param_req = False
             else:
-                print msg_type
+                rospy.loginfo("[MAVROS:%s] Received %s message." % (self.name, str(msg_type)))
 
 
 # #******************************************************************************

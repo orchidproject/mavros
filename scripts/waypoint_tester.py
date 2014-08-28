@@ -167,8 +167,8 @@ def construct_spiral_sweep(command_switch):
     i.frame = mavros.msg.Instruction.FRAME_LOCAL
     i.waitTime = 2
     i.range = 5
-    i.latitude = 16
-    i.longitude = 16
+    i.latitude = 10
+    i.longitude = 10
     i.altitude = 1.5
     instructions.inst.append(i)
 
@@ -177,8 +177,8 @@ def construct_spiral_sweep(command_switch):
     i.frame = mavros.msg.Instruction.FRAME_LOCAL
     i.waitTime = 5
     i.range = 0.5
-    i.latitude = 8
-    i.longitude = 8
+    i.latitude = 2
+    i.longitude = 2
     i.altitude = 1.5
     instructions.inst.append(i)
 
@@ -206,7 +206,7 @@ def construct_rect_sweep(command_switch):
     i.waitTime = 2
     i.range = 5
     i.latitude = 2
-    i.longitude = 2
+    i.longitude = -2
     i.altitude = 1.5
     instructions.inst.append(i)
 
@@ -215,8 +215,8 @@ def construct_rect_sweep(command_switch):
     i.frame = mavros.msg.Instruction.FRAME_LOCAL
     i.waitTime = 5
     i.range = 0.5
-    i.latitude = 12
-    i.longitude = 12
+    i.latitude = 18
+    i.longitude = -18
     i.altitude = 1.5
     instructions.inst.append(i)
 
