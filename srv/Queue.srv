@@ -12,5 +12,7 @@ uint8 CMD_MANUAL_LAND = 14
 
 uint8 CMD_EMERGENCY = 20
 uint8 CMD_SWITCH_CAMERA = 21
+
+uint8 CMD_CALIBRATE_YAW = 30
 ---
 bool result

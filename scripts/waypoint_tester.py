@@ -42,14 +42,14 @@ def construct_waypoints_global(n, command_switch):
         instructions.inst.append(i)
         start += inc
 
-        if command_switch:
-            i = mavros.msg.Instruction()
-            i.type = mavros.msg.Instruction.TYPE_LAND
-            instructions.inst.append(i)
-
-            i = mavros.msg.Instruction()
-            i.type = mavros.msg.Instruction.TYPE_TAKEOFF
-            instructions.inst.append(i)
+        # if command_switch:
+        #     i = mavros.msg.Instruction()
+        #     i.type = mavros.msg.Instruction.TYPE_LAND
+        #     instructions.inst.append(i)
+        #
+        #     i = mavros.msg.Instruction()
+        #     i.type = mavros.msg.Instruction.TYPE_TAKEOFF
+        #     instructions.inst.append(i)
 
         i = mavros.msg.Instruction()
         i.type = mavros.msg.Instruction.TYPE_GOTO
@@ -113,18 +113,18 @@ def construct_waypoints_local(n, command_switch):
     instructions.inst.append(i)
     start += inc
 
-    if command_switch:
-        i = mavros.msg.Instruction()
-        i.type = mavros.msg.Instruction.TYPE_LAND
-        i.waitTime = 5
-        i.frame = mavros.msg.Instruction.FRAME_LOCAL
-        instructions.inst.append(i)
-
-        i = mavros.msg.Instruction()
-        i.type = mavros.msg.Instruction.TYPE_TAKEOFF
-        i.waitTime = 5
-        i.frame = mavros.msg.Instruction.FRAME_LOCAL
-        instructions.inst.append(i)
+    # if command_switch:
+    #     i = mavros.msg.Instruction()
+    #     i.type = mavros.msg.Instruction.TYPE_LAND
+    #     i.waitTime = 5
+    #     i.frame = mavros.msg.Instruction.FRAME_LOCAL
+    #     instructions.inst.append(i)
+    #
+    #     i = mavros.msg.Instruction()
+    #     i.type = mavros.msg.Instruction.TYPE_TAKEOFF
+    #     i.waitTime = 5
+    #     i.frame = mavros.msg.Instruction.FRAME_LOCAL
+    #     instructions.inst.append(i)
 
     i = mavros.msg.Instruction()
     i.type = mavros.msg.Instruction.TYPE_GOTO
@@ -165,8 +165,8 @@ def construct_spiral_sweep(command_switch):
     i = mavros.msg.Instruction()
     i.type = mavros.msg.Instruction.TYPE_SPIRAL_SWEEP
     i.frame = mavros.msg.Instruction.FRAME_LOCAL
-    i.waitTime = 2
-    i.range = 5
+    i.waitTime = 3
+    i.range = 8
     i.latitude = 10
     i.longitude = 10
     i.altitude = 1.5
@@ -176,7 +176,7 @@ def construct_spiral_sweep(command_switch):
     i.type = mavros.msg.Instruction.TYPE_SPIRAL_SWEEP
     i.frame = mavros.msg.Instruction.FRAME_LOCAL
     i.waitTime = 5
-    i.range = 0.5
+    i.range = 2
     i.latitude = 2
     i.longitude = 2
     i.altitude = 1.5
@@ -203,21 +203,21 @@ def construct_rect_sweep(command_switch):
     i = mavros.msg.Instruction()
     i.type = mavros.msg.Instruction.TYPE_RECT_SWEEP
     i.frame = mavros.msg.Instruction.FRAME_LOCAL
-    i.waitTime = 2
-    i.range = 5
+    i.waitTime = 3
+    i.range = 8
     i.latitude = 2
-    i.longitude = -2
-    i.altitude = 1.5
+    i.longitude = 2
+    i.altitude = 2
     instructions.inst.append(i)
 
     i = mavros.msg.Instruction()
     i.type = mavros.msg.Instruction.TYPE_RECT_SWEEP
     i.frame = mavros.msg.Instruction.FRAME_LOCAL
     i.waitTime = 5
-    i.range = 0.5
+    i.range = 2
     i.latitude = 18
-    i.longitude = -18
-    i.altitude = 1.5
+    i.longitude = 18
+    i.altitude = 2
     instructions.inst.append(i)
 
     if command_switch:

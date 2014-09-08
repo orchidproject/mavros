@@ -226,7 +226,7 @@ if __name__ == '__main__':
         if not opts.ros or opts.name in rospy.get_param("/drones_active"):
             rospy.wait_for_service("/" + opts.name + "/queue/cmd")
             rospy.init_node("nav_gui")
-            gui = NavGUI(opts.name, opts.command_switch)
+            gui = NavGUI(opts.name, True)
             gui.start()
     except rospy.ROSInterruptException:
         gui.root.quit()

@@ -1,18 +1,12 @@
 #!/usr/bin/env python
 import rospy
-from std_msgs.msg import String, Header, Bool
-from std_srvs.srv import *
-from sensor_msgs.msg import NavSatFix, NavSatStatus, Imu
-from geometry_msgs.msg import Vector3, PoseStamped
+from std_msgs.msg import Header
+from sensor_msgs.msg import NavSatFix, NavSatStatus, TimeReference
+from geometry_msgs.msg import Vector3
 import mavros.msg
 import mavros.srv
-import sys, struct, time, os
-import math
-import xmlrpclib
-import tools
+import sys, os, math, tf
 from socket import error
-import math
-import tf
 
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.realpath(__file__)), '../mavlink/pymavlink'))
 from mavutil import mavlink as mav
@@ -42,25 +36,23 @@ class MavRosProxy:
 
         self.altitude_min = altitude_min
         self.altitude_max = altitude_max
-
+        self.yaw_offset = 0
+        self.yaw_counter = 0
+        self.last_current = 0
         # Global message containers
         self.state = mavros.msg.State()
-        self.last_current = 0
         self.gps_msg = NavSatFix()
-        self.pose_msg = PoseStamped()
-        #self.filtered_pos_msg = NavSatFix()
         self.filtered_pos_msg = mavros.msg.FilteredPosition()
-        self.imu_msg = Imu()
 
         self.pub_gps = rospy.Publisher(self.name + '/gps', NavSatFix, queue_size=10)
-        self.pub_imu = rospy.Publisher(self.name + '/imu', Imu, queue_size=10)
         # self.pub_rc = rospy.Publisher('rc', mavros.msg.RC, queue_size=10)
         self.pub_state = rospy.Publisher(self.name + '/state', mavros.msg.State, queue_size=10)
         # self.pub_vfr_hud = rospy.Publisher('vfr_hud', mavros.msg.VFR_HUD, queue_size=10)
         self.pub_attitude = rospy.Publisher(self.name + '/attitude', mavros.msg.Attitude, queue_size=10)
-        self.pub_raw_imu = rospy.Publisher(self.name + '/raw_imu', Imu, queue_size=10)
+        # self.pub_raw_imu = rospy.Publisher(self.name + '/raw_imu', Imu, queue_size=10)
         self.pub_status = rospy.Publisher(self.name + '/status', mavros.msg.Status, queue_size=10)
         self.pub_filtered_pos = rospy.Publisher(self.name + '/filtered_pos', mavros.msg.FilteredPosition, queue_size=10)
+        self.pub_time_sync = rospy.Publisher(self.name + '/time_sync', TimeReference, queue_size=10)
         # self.pub_current_mission = rospy.Publisher('current_mission', mavros.msg.CurrentMission, queue_size=10)
         # self.pub_mission_item = rospy.Publisher('mission_item', mavros.msg.MissionItem, queue_size=10)
         rospy.Subscriber(self.name + "/send_rc", mavros.msg.RC, self.send_rc_cb)
@@ -241,19 +233,19 @@ class MavRosProxy:
         seq = self.state.current
         if old == 0:
             start_time = rospy.Time.now().to_sec()
-            self.connection.waypoint_count_send(len(req.waypoints) + 1)
+            self.connection.waypoint_count_send(len(req.waypoints))
             while self.list_ack < start_time:
                 if rospy.Time.now().to_sec() - start_time > self.command_timeout:
                     rospy.loginfo("[MAVROS:%s]Time out on sending MISSION_COUNT" % self.name)
                     return False
-            dummy = mavros.msg.Waypoint()
-            dummy.frame = mav.MAV_FRAME_GLOBAL_RELATIVE_ALT
-            dummy.type = mav.MAV_CMD_NAV_WAYPOINT
-            dummy.autocontinue = 0
-            dummy.latitude = self.filtered_pos_msg.latitude
-            dummy.longitude = self.filtered_pos_msg.longitude
-            dummy.altitude = self.altitude_min + 0.5
-            self.transmit_waypoint(dummy)
+        #     dummy = mavros.msg.Waypoint()
+        #     dummy.frame = mav.MAV_FRAME_GLOBAL_RELATIVE_ALT
+        #     dummy.type = mav.MAV_CMD_NAV_WAYPOINT
+        #     dummy.autocontinue = 0
+        #     dummy.latitude = self.filtered_pos_msg.latitude
+        #     dummy.longitude = self.filtered_pos_msg.longitude
+        #     dummy.altitude = self.altitude_min + 0.5
+        #     self.transmit_waypoint(dummy)
         # Send entire list of waypoints
         for i in range(len(req.waypoints)):
             if req.waypoints[i].frame == mavros.msg.Waypoint.TYPE_GLOBAL:
@@ -372,12 +364,10 @@ class MavRosProxy:
                 # msg.climb)
 
             elif msg_type == "GPS_RAW_INT":
-                fix = NavSatStatus.STATUS_NO_FIX
-                if msg.fix_type >= 3:
-                    fix = NavSatStatus.STATUS_FIX
-
-                self.gps_msg.header.frame_id = 'base_link'
-                self.gps_msg.header.stamp = rospy.Time.now()
+                self.pub_time_sync.publish(Header(stamp=rospy.Time.now()), rospy.Time.from_sec(msg.time_usec / 1E6),
+                                           self.name)
+                self.gps_msg.header.frame_id = self.name + "_base_link"
+                self.gps_msg.header.stamp = rospy.Time().now()
                 self.gps_msg.latitude = msg.lat / 1e07
                 self.gps_msg.longitude = msg.lon / 1e07
                 self.gps_msg.altitude = msg.alt / 1e07
@@ -387,18 +377,24 @@ class MavRosProxy:
                 position_covariance[8] = UERE_CONSTANT * (msg.epv ** 2) + NE_CONSTANT ** 2
                 self.gps_msg.position_covariance = position_covariance
                 self.gps_msg.position_covariance_type = NavSatFix.COVARIANCE_TYPE_APPROXIMATED
+                fix = NavSatStatus.STATUS_NO_FIX
+                if msg.fix_type >= 3:
+                    fix = NavSatStatus.STATUS_FIX
                 self.gps_msg.status = NavSatStatus(status=fix, service=NavSatStatus.SERVICE_GPS)
                 self.pub_gps.publish(self.gps_msg)
 
             elif msg_type == "ATTITUDE":
-                self.pub_attitude.publish(msg.roll, msg.pitch, msg.yaw, msg.rollspeed, msg.pitchspeed, msg.yawspeed)
-
+                self.pub_time_sync.publish(Header(stamp=rospy.Time.now()), rospy.Time.from_sec(msg.time_boot_ms / 1E3),
+                                           self.name)
+                self.pub_attitude.publish(Header(stamp=rospy.Time.now()),
+                                          msg.roll, msg.pitch, msg.yaw, msg.rollspeed, msg.pitchspeed, msg.yawspeed)
             elif msg_type == "RAW_IMU":
-                self.imu_msg.header.stamp = rospy.Time(msg.time_usec / 1000)
-                self.imu_msg.linear_acceleration = Vector3(x=msg.xacc, y=msg.xacc, z=msg.xacc)
-                self.imu_msg.angular_velocity = Vector3(x=msg.xgyro, y=msg.ygyro, z=msg.zgyro)
-                self.imu_msg.orientation = tf.transformations.quaternion_from_euler(0, 0, math.atan2(msg.xmag, msg.ymag))
-                self.pub_raw_imu.publish(self.imu_msg)
+                pass
+                # self.imu_msg.header.stamp = rospy.Time().now()
+                #self.imu_msg.linear_acceleration = Vector3(x=msg.xacc, y=msg.xacc, z=msg.xacc)
+                #self.imu_msg.angular_velocity = Vector3(x=msg.xgyro, y=msg.ygyro, z=msg.zgyro)
+                #self.imu_msg.orientation = tf.transformations.quaternion_from_euler(0, 0, math.atan2(msg.xmag, msg.ymag))
+                #self.pub_raw_imu.publish(self.imu_msg)
 
             elif msg_type == "SYS_STATUS":
                 status_msg = mavros.msg.Status()
@@ -410,7 +406,9 @@ class MavRosProxy:
                 self.pub_status.publish(status_msg)
 
             elif msg_type == "GLOBAL_POSITION_INT":
-                self.filtered_pos_msg.header.stamp = rospy.Time(msg.time_boot_ms / 1000)
+                self.pub_time_sync.publish(Header(stamp=rospy.Time.now()), rospy.Time.from_sec(msg.time_boot_ms / 1E3),
+                                           self.name)
+                self.filtered_pos_msg.header.stamp = rospy.Time().now()
                 self.filtered_pos_msg.latitude = msg.lat / 1E7
                 self.filtered_pos_msg.longitude = msg.lon / 1E7
                 self.filtered_pos_msg.altitude = msg.alt / 1E3
@@ -418,6 +416,7 @@ class MavRosProxy:
                 self.filtered_pos_msg.ground_x_speed = msg.vx
                 self.filtered_pos_msg.ground_y_speed = msg.vy
                 self.filtered_pos_msg.ground_z_speed = msg.vz
+                # NORTH IS 180, WEST-90, SOUTH-0, EVERYTHING BETWEEN SOUTH-EAST-NORTH SIDE IS 0 for AR Drone 2.0
                 self.filtered_pos_msg.heading = msg.hdg
                 self.pub_filtered_pos.publish(self.filtered_pos_msg)
 
@@ -440,13 +439,14 @@ class MavRosProxy:
                 # self.pub_current_mission.publish(self.current_mission_msg)
 
             elif msg_type == "MISSION_ITEM":
-                rospy.loginfo("[MAVROS:%s]%s" % (self.name, msg))
+                pass
+                #rospy.loginfo("[MAVROS:%s]%s" % (self.name, msg))
                 # header = Header()
                 # header.stamp = rospy.Time.now()
                 # self.pub_mission_item.publish(header, msg.seq, msg.current,
                 # msg.autocontinue, msg.param1,
                 # msg.param2, msg.param3, msg.param4,
-                #                              msg.x, msg.y, msg.z)
+                # msg.x, msg.y, msg.z)
 
             elif msg_type == "MISSION_COUNT":
                 self.state.missions = msg.count

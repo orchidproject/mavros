@@ -25,5 +25,11 @@
     <remap from="robot_pose_ekf/odom_combined" to="odom_combined" />
   </node>
 
+  <node pkg="ar2mav" type="drone_video" name="video_Parrot" respawn="false" output="screen">
+	<param name="name" value="Parrot" />
+  </node>
+  <node pkg="image_transport" type="republish" name="publisher" args="x264 in:=/Parrot/video compressed out:=/republished/image" />
+  <node pkg="rqt_image_view" type="rqt_image_view" name="image_view" output="screen" />
+
   <node pkg="rosbag" type="record" name="rosbag_record" args="-a" />
 </launch>

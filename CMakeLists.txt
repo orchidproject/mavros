@@ -143,7 +143,6 @@ install(PROGRAMS
   scripts/driver.py
   scripts/mosaic_node.py
   scripts/nav_gui.py
-  scripts/calibrate.py
   DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION}
 )
 
