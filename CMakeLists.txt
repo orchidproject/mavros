@@ -141,7 +141,7 @@ include_directories(
 ## in contrast to setup.py, you can choose the destination
 install(PROGRAMS
   scripts/driver.py
-  scripts/mosaic_node.py
+  scripts/queue_node.py
   scripts/nav_gui.py
   DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION}
 )
