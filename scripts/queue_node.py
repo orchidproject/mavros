@@ -512,10 +512,12 @@ class QueueNode:
         if len(waypoints) > 0:
             #self.sending = True
             self.mav_cmd(20, 0)
+            rospy.sleep(1)
             self.execute = False
             if self.mav_wps(waypoints).result:
                 self.send += len(waypoints)
                 #self.sending = False
+                rospy.sleep(1)
                 self.mav_cmd(21, 0)
                 self.execute = True
                 return True
