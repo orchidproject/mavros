@@ -353,6 +353,7 @@ class MavRosProxy:
             elif msg_type == "HEARTBEAT":
                 self.state.base_mode = msg.base_mode
                 self.state.custom_mode = msg.custom_mode
+                self.state.system_status = msg.system_status
                 self.state.header.stamp = rospy.Time.now()
                 self.pub_state.publish(self.state)
                 # rospy.loginfo("[MAVROS:%s] HB:(%d,%d)" % (self.name, msg.base_mode, msg.custom_mode))

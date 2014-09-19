@@ -140,7 +140,7 @@ class NavGUI:
         self.root.bind("<k>", lambda (event): self.queue(q.CMD_EXECUTE))
         self.root.bind("<l>", lambda (event): self.queue(q.CMD_PAUSE))
         self.root.bind("<j>", lambda (event): self.queue(q.CMD_SWITCH_CAMERA))
-        self.root.bind("<space>", lambda (event): self.emergency(2))
+        self.root.bind("<space>", lambda (event): self.land_all())
         self.root.bind("<F11>", lambda (event): self.queue(q.CMD_EMERGENCY))
         self.root.bind("<F12>", lambda (event): self.kill_all())
 
@@ -170,7 +170,7 @@ class NavGUI:
         label11.grid(row=10)
         label12 = Label(frame, text="Pause - L", font=self.font)
         label12.grid(row=11)
-        label13 = Label(frame, text="Emergency Land - Space", font=self.font)
+        label13 = Label(frame, text="Land All - Space", font=self.font)
         label13.grid(row=12)
         label14 = Label(frame, text="!KILL! - F11", font=self.font)
         label14.grid(row=13)
@@ -195,6 +195,14 @@ class NavGUI:
             try:
                 i.wait_for_service(timeout=2)
                 i(q.CMD_EMERGENCY)
+            except rospy.exceptions.ROSException:
+                pass
+
+    def land_all(self):
+        for i in self.all[1]:
+            try:
+                i.wait_for_service(timeout=2)
+                i(q.CMD_MANUAL_LAND)
             except rospy.exceptions.ROSException:
                 pass
 

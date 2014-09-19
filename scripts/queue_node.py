@@ -406,8 +406,6 @@ class QueueNode:
             rospy.loginfo("[QUEUE:%s]Queue failed to pause" % self.name)
             return False
         elif req.command == CMD_EXECUTE:
-            if self.execute:
-                return True
             if self.mav_cmd(21, 0).result:
                 self.execute = True
                 rospy.loginfo("[QUEUE:%s]Starting execution of Queue" % self.name)
