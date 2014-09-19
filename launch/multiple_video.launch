@@ -28,22 +28,22 @@
   <node pkg="mavros" type="nav_gui.py" name="gui_kevin" output="screen" args="-n Kevin -r" />
   <node pkg="mavros" type="nav_gui.py" name="gui_iago" output="screen" args="-n Iago -r" />
 
-  <node pkg="ar2mav" type="drone_video" name="video_Parrot" respawn="false" output="screen">
+  <node pkg="ar2mav" type="video" name="video_Parrot" respawn="false" output="screen">
 	<param name="name" value="Parrot" />
   </node>
-  <node pkg="ar2mav" type="drone_video" name="video_Polly" respawn="false" output="screen">
+  <node pkg="ar2mav" type="video" name="video_Polly" respawn="false" output="screen">
 	<param name="name" value="Polly" />
   </node>
-  <node pkg="ar2mav" type="drone_video" name="video_Charlie" respawn="false" output="screen">
+  <node pkg="ar2mav" type="video" name="video_Charlie" respawn="false" output="screen">
 	<param name="name" value="Charlie" />
   </node>
-  <node pkg="ar2mav" type="drone_video" name="video_Tweety" respawn="false" output="screen">
+  <node pkg="ar2mav" type="video" name="video_Tweety" respawn="false" output="screen">
 	<param name="name" value="Tweety" />
   </node>
-  <node pkg="ar2mav" type="drone_video" name="video_Kevin" respawn="false" output="screen">
+  <node pkg="ar2mav" type="video" name="video_Kevin" respawn="false" output="screen">
 	<param name="name" value="Kevin" />
   </node>
-  <node pkg="ar2mav" type="drone_video" name="video_Iago" respawn="false" output="screen">
+  <node pkg="ar2mav" type="video" name="video_Iago" respawn="false" output="screen">
 	<param name="name" value="Iago" />
   </node>
   <node pkg="rosbag" type="record" name="rosbag_record" args="-a" />

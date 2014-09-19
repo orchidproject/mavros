@@ -28,7 +28,7 @@
   <node pkg="ar2mav" type="video" name="Parrot_video"  output="screen" >
 	<param name="name" value="Parrot" />
   </node>
-  <node pkg="image_transport" type="republish" name="publisher" args="x264 in:=/Parrot/video raw out:=/republished/image" />
+  <node pkg="image_transport" type="republish" name="publisher" args="x264 in:=/Parrot/video raw out:=/Parrot/video/image_raw" />
   <node pkg="rqt_image_view" type="rqt_image_view" name="image_view" output="screen" />
 
   <node pkg="rosbag" type="record" name="rosbag_record" args="-a" />
