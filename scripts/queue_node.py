@@ -87,8 +87,8 @@ class QueueNode:
         self.mav_params = rospy.ServiceProxy(self.prefix + "params", mavros.srv.Parameters)
         rospy.loginfo("[QUEUE:%s]Requesting parameters and clearing waypoints..." % self.name)
         local_params = rospy.get_param("/drone_params")
-        self.front_camera = rospy.get_param("/drone_front_camera")
-        self.bottom_camera = rospy.get_param("/drone_bottom_camera")
+        self.front_camera = rospy.get_param("/" + self.name + "/front_camera")
+        self.bottom_camera = rospy.get_param("/" + self.name + "/bottom_camera")
         params = self.mav_params(local_params.keys(), local_params.values())
         self.mav_cmd(5, 0)
         for i in range(len(params.names)):
@@ -370,10 +370,10 @@ class QueueNode:
         cp = self.bottom_camera
         if camera == 1:
             cp = self.front_camera
-        xp = ((x[0] - cp["camera_matrix"][2]) / cp["camera_matrix"][0], (x[1] - cp["camera_matrix"][5])/cp["camera_matrix"][4])
+        xp = ((x[0] - cp["K"][2]) / cp["K"][0], (x[1] - cp["K"][5])/cp["K"][4])
         #print "init: ", xp
         error = 1
-        k = cp["distortion_coeff"]
+        k = cp["D"]
         while error > 0.001:
             r2 = xp[0]**2 + xp[1]**2
             k_radial = 1 + k[0] * r2 + k[1] * r2 * r2 + k[4] * r2 * r2 * r2
@@ -406,6 +406,8 @@ class QueueNode:
             rospy.loginfo("[QUEUE:%s]Queue failed to pause" % self.name)
             return False
         elif req.command == CMD_EXECUTE:
+            # if self.execute:
+            #     return True
             if self.mav_cmd(21, 0).result:
                 self.execute = True
                 rospy.loginfo("[QUEUE:%s]Starting execution of Queue" % self.name)
