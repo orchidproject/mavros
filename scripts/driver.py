@@ -1,21 +1,100 @@
 #!/usr/bin/env python
+"""ROS node for low-level control of mavlink platforms
+
+   COMMAND-LINE ARGUMENTS
+   ----------------------
+
+   -n, --name
+   Name of platform to control. Used as topic prefix and to look up
+   settings in ROS parameter server.
+
+   -b, --baudrate
+   Baudrate for communication with platform.
+
+   -d, --device
+   Device for communication with mavlink. This can be serial, tcp or
+   udp port
+                    
+   -s, --source-system
+   MAVLink source system for this node
+
+   -t, --command-timeout
+   Timeout for waiting for MAV commands accomplishment.
+
+   --mina, --minimum-altitude
+   Minimum altitude waypoints must have to be accepted (meters) [default=1]
+
+   --maxa, --maximum-altitude
+   Minimum altitude waypoints must have to be accepted (meters) [default=5]
+
+   -r, --ros
+   Use ROS parameter server [default False]
+
+   -l, --local
+   Local IP address to use [default 127.0.0.1]
+
+   SUBSCRIBED TOPICS
+   -----------------
+   Topic                Type        Description
+   /uav_name/send_rc    mavors/RC   Sends Remote Control Commands to MAV
+
+   PUBLISHED TOPICS
+   ----------------
+   Topic                    Type                Description
+   /uav_name/gps            NavSatFix           Raw GPS fix from MAV
+   /uav_name/state          State               MAV's current mode and mission information
+   /uav_name/attitude       Attitude            Fused Attitude estimate from MAV
+   /uav_name/status         Status              MAV status info, including battery level
+   /uav_name/filtered_pos   FilteredPosition    Fused Position estimate from MAV
+   /uav_name/time_sync      TimeReference       Estimate of lag between MAV and ROS time,
+                                                used for synchronisation.
+
+   SERVICES PROVIDED
+   -----------------
+   Service                  Type            Description
+   /uav_name/command        Command         Send MAV Command to drone e.g. change mode
+   /uav_name/waypoints      WaypointList    Sets waypoint mission list on MAV (overwrites previous)
+   /uav_name/params         Parameters      Gets/Sets Parameters on MAV as key/value pairs
+
+"""
+#******************************************************************************
+# Standard Imports
+#******************************************************************************
+import sys, os, math, tf
+from socket import error
+
+#******************************************************************************
+# ROS Imports
+#******************************************************************************
 import rospy
 from std_msgs.msg import Header
 from sensor_msgs.msg import NavSatFix, NavSatStatus, TimeReference
 from geometry_msgs.msg import Vector3
 import mavros.msg
 import mavros.srv
-import sys, os, math, tf
-from socket import error
 
-sys.path.insert(0, os.path.join(os.path.dirname(os.path.realpath(__file__)), '../mavlink/pymavlink'))
+#******************************************************************************
+# Import mavlink packages
+#******************************************************************************
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.realpath(__file__)),
+                '../mavlink/pymavlink'))
 from mavutil import mavlink as mav
 from mavutil import mavlink_connection as mav_connect
 from mavutil import all_printable as print_msg
 from tools import *
 
-UERE_CONSTANT = 45.5 / 9
+#******************************************************************************
+# Constants used in calculation of position covariance
+# Something to do with standard GPS error analysis techniques, but not sure
+# what these are really based on.
+#******************************************************************************
+UERE_CONSTANT = 45.5 / 9  # User equivalent range error?
 NE_CONSTANT = 1
+
+#******************************************************************************
+# Adhoc manual mode - apparently used to request manual control of MAVs that
+# might not support manual mode
+#******************************************************************************
 ADHOC_MANUAL = 99
 
 
