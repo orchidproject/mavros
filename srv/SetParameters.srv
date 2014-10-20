@@ -1,5 +1,4 @@
 string[] names
 float32[] values
 ---
-string[] names
-float32[] values
+Error status

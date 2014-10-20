@@ -13,4 +13,4 @@ uint8 CMD_CUSTOM_MODE = 11
 uint8 CMD_HALT = 20
 uint8 CMD_RESUME = 21
 ---
-bool result
+Error status

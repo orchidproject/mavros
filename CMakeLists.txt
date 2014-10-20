@@ -50,27 +50,25 @@ find_package(catkin REQUIRED COMPONENTS
 add_message_files(
   FILES
   Attitude.msg
-  CurrentMission.msg
+  Error.msg
   FilteredPosition.msg
-  Instruction.msg
-  InstructionList.msg
-  Mavlink_RAW_IMU.msg
-  MissionItem.msg
   RC.msg
   State.msg
   Status.msg
-  VFR_HUD.msg
-  Waypoint.msg
   Velocity.msg
+  Waypoint.msg
 )
 
 ## Generate services in the 'srv' folder
 add_service_files(
   FILES
-  Command.srv
-  Queue.srv
-  SendWaypoints.srv
-  Parameters.srv
+  MAVCommand.srv
+  SimpleCommand.srv
+  SetMode.srv
+  GetParameters.srv
+  SetParameters.srv
+  GetWaypoints.srv
+  SetWaypoints.srv
 )
 
 ## Generate actions in the 'action' folder
@@ -83,7 +81,9 @@ add_service_files(
 ## Generate added messages and services with any dependencies listed here
 generate_messages(
   DEPENDENCIES
-  geometry_msgs#   sensor_msgs#   std_msgs
+  geometry_msgs
+  sensor_msgs
+  std_msgs
 )
 
 ###################################
