@@ -3,6 +3,7 @@
   <arg name="file" default="$(find ar2mav)/drones.yaml"/>
 
   <rosparam file="$(find mavros)/drone_params.yaml" command="load" />
+  <rosparam file="$(find ar2mav)/tweety_camera.yaml" command="load" ns="Parrot" />
   <rosparam file="$(arg file)" command="load" />
 
   <node pkg="ar2mav" type="arproxy.py" name="arproxy" output="screen" args="-f $(arg file) -l $(arg address) -v 1 -q" />

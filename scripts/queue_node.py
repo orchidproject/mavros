@@ -87,8 +87,8 @@ class QueueNode:
         self.mav_params = rospy.ServiceProxy(self.prefix + "params", mavros.srv.Parameters)
         rospy.loginfo("[QUEUE:%s]Requesting parameters and clearing waypoints..." % self.name)
         local_params = rospy.get_param("/drone_params")
-        self.front_camera = rospy.get_param("/" + self.name + "/front_camera")
-        self.bottom_camera = rospy.get_param("/" + self.name + "/bottom_camera")
+        self.front_camera = rospy.get_param("/Parrot/front_camera")
+        self.bottom_camera = rospy.get_param("/Parrot/bottom_camera")
         params = self.mav_params(local_params.keys(), local_params.values())
         self.mav_cmd(5, 0)
         for i in range(len(params.names)):

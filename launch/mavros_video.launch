@@ -6,6 +6,7 @@
   <node pkg="ar2mav" type="arproxy.py" name="arproxy" output="screen" args="-f $(arg file) -l $(arg address) -v 1 -q" />
   
   <rosparam file="$(find mavros)/drone_params.yaml" command="load" />
+  <rosparam file="$(find ar2mav)/tweety_camera.yaml" command="load" ns="Parrot" />
   <node pkg="mavros" type="driver.py" name="mavros_parrot" output="screen" args="-n Parrot -l $(arg address) -r" />
   <node pkg="mavros" type="queue_node.py" name="queue_parrot" output="screen" args="-n Parrot -r" />
   <node pkg="mavros" type="nav_gui.py" name="gui_parrot" output="screen" args="-n Parrot -r" />
