@@ -1,13 +1,13 @@
 <launch>
-  <arg name="address" default="192.168.10.102" />
+  <arg name="address" default="192.168.10.101" />
   <arg name="file" default="$(find ar2mav)/drones.yaml"/>
-
+  
   <rosparam file="$(find mavros)/drone_params.yaml" command="load" />
   <rosparam file="$(find ar2mav)/tweety_camera.yaml" command="load" ns="Parrot" />
+
   <rosparam file="$(arg file)" command="load" />
-
   <node pkg="ar2mav" type="arproxy.py" name="arproxy" output="screen" args="-f $(arg file) -l $(arg address) -v 1 -q" />
-
+  
   <node pkg="mavros" type="driver.py" name="mavros_parrot" output="screen" args="-n Parrot -l $(arg address) -r" />
   <node pkg="mavros" type="driver.py" name="mavros_polly" output="screen" args="-n Polly -l $(arg address) -r" />
   <node pkg="mavros" type="driver.py" name="mavros_charlie" output="screen" args="-n Charlie -l $(arg address) -r" />
@@ -29,7 +29,38 @@
   <node pkg="mavros" type="nav_gui.py" name="gui_kevin" output="screen" args="-n Kevin -r" />
   <node pkg="mavros" type="nav_gui.py" name="gui_iago" output="screen" args="-n Iago -r" />
 
+  <node pkg="ar2mav" type="video" name="video_Parrot" respawn="false" output="screen">
+	<param name="name" value="Parrot" />
+	<remap from="/x264" to="/Parrot/video/x264" />
+  </node>
+  <node pkg="ar2mav" type="video" name="video_Polly" respawn="false" output="screen">
+	<param name="name" value="Polly" />
+	<remap from="/x264" to="/Polly/video/x264" />
+  </node>
+  <node pkg="ar2mav" type="video" name="video_Charlie" respawn="false" output="screen">
+	<param name="name" value="Charlie" />
+	<remap from="/x264" to="/Charlie/video/x264" />
+  </node>
+  <node pkg="ar2mav" type="video" name="video_Tweety" respawn="false" output="screen">
+	<param name="name" value="Tweety" />
+	<remap from="/x264" to="/Tweety/video/x264" />
+  </node>
+  <node pkg="ar2mav" type="video" name="video_Kevin" respawn="false" output="screen">
+	<param name="name" value="Kevin" />
+	<remap from="/x264" to="/Kevin/video/x264" />
+  </node>
+  <node pkg="ar2mav" type="video" name="video_Iago" respawn="false" output="screen">
+	<param name="name" value="Iago" />
+	<remap from="/x264" to="/Iago/video/x264" />
+  </node>
+
+  <node pkg="image_transport" type="republish" name="publisher_Parrot" args="x264 in:=/Parrot/video raw out:=/Parrot/video/image_raw" />
+  <node pkg="image_transport" type="republish" name="publisher_Polly" args="x264 in:=/Polly/video raw out:=/Polly/video/image_raw" />
+  <node pkg="image_transport" type="republish" name="publisher_Charlie" args="x264 in:=/Charlie/video raw out:=/Charlie/video/image_raw" />
+  <node pkg="image_transport" type="republish" name="publisher_Tweety" args="x264 in:=/Tweety/video raw out:=/Tweety/video/image_raw" />
+  <node pkg="image_transport" type="republish" name="publisher_Kevin" args="x264 in:=/Kevin/video raw out:=/Kevin/video/image_raw" />
+  <node pkg="image_transport" type="republish" name="publisher_Iago" args="x264 in:=/Iago/video raw out:=/Iago/video/image_raw" />
+  <!-- <node pkg="rqt_image_view" type="rqt_image_view" name="image_view" output="screen" /> -->
+
   <node pkg="rosbag" type="record" name="rosbag_record" args="-a" />
 </launch>
-
-
