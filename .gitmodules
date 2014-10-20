@@ -1,4 +1,4 @@
 [submodule "mavlink"]
 	path = mavlink
 	url = https://github.com/orchidproject/mavlink.git
-	branch = stable
+	branch = ourfix
