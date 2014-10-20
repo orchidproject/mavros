@@ -104,7 +104,7 @@ class MavRosProxy:
         self.device = device
         self.baudrate = baudrate
         self.source_system = source_system
-        self.command_timeout = command_timeout
+        self.command_timeout = rospy.Duration(secs=command_timeout)
         self.connection = None
         # self.seq = 0
         self.mission_result = 0
@@ -163,13 +163,32 @@ class MavRosProxy:
            See mavros/GetParameters.srv definition for details
         '''
 
+        #**********************************************************************
+        # Fetch all parameter values from MAV
+        #**********************************************************************
+        rospy.loginfo("Fetching MAV Parameters for %s" % self.uav_name)
         self.connection.param_fetch_complete = False
         self.connection.param_fetch_all()
+        start_time = rospy.Time.now()
         while not self.connection.param_fetch_complete:
             rospy.sleep(0.1)
+            if (rospy.Time.now() - start_time) > self.command_timeout:
+                rospy.logwarn("Request for parameters from %s timed out" %
+                              self.uav_name)
+                result = mavros.srv.GetParametersResponse()
+                result.status.code = mavros.msg.Error.MAV_TIMEOUT
+                return result
 
-        result = # TODO implementation not finished
-        return self.connection.params.keys(), self.connection.params.values()
+        #**********************************************************************
+        # If we get this far, return parameter values and indicate successful
+        # execution.
+        #**********************************************************************
+        result = mavros.srv.GetParametersResponse()
+        result.keys = self.connection.params.keys()
+        result.values = self.connection.params.values()
+        result.status.code = mavros.msg.Error.SUCCESS
+        rospy.loginfo("Returning MAV Parameters for %s" % self.uav_name)
+        return result
 
     def set_params_cb(self, req):
         '''Callback for setting parametesr on MAV
@@ -182,22 +201,69 @@ class MavRosProxy:
            See mavros/SetParameters service definition for details.
         '''
 
-#   TODO implementation not finished
-        values = list()
+        #**********************************************************************
+        #   Ensure that number of keys matches number of values
+        #**********************************************************************
+        if len(req.values) != len(req.keys):
+            rospy.logerr(""""[MAVROS:%s] number of parameter keys must match \
+                            number of values!""")
+            result = mavros.srv.GetParametersResponse()
+            result.status.code = mavros.msg.Error.KEY_VALUE_COUNT_MISMATCH
+            return result
+
+        #**********************************************************************
+        #   For each parameter
+        #**********************************************************************
         for i in range(len(req.values)):
-            start_time = rospy.Time.now().to_sec()
-            rospy.loginfo("[MAVROS:%s]REQUESTED: " % self.uav_name + req.names[i] + " " + str(req.values[i]))
+
+            #******************************************************************
+            # Send request to set current parameter
+            #******************************************************************
+            start_time = rospy.Time.now()
+            rospy.loginfo("[MAVROS:%s] SETTING: " % self.uav_name +
+                          req.names[i] + "=" + str(req.values[i]))
             self.param_req = True
             self.connection.param_fetch_complete = False
             self.connection.param_set_send(req.names[i], req.values[i])
+
+            #******************************************************************
+            # Wait for operation to complete, or time out
+            #******************************************************************
             while not self.connection.param_fetch_complete:
                 rospy.sleep(0.1)
-                if (rospy.Time.now().to_sec() - start_time) > self.command_timeout:
-                    values.append(0.0)
-                    break
-            if self.connection.param_fetch_complete:
-                values.append(self.connection.params[req.names[i]])
-        return req.names, values
+                if (rospy.Time.now() - start_time) > self.command_timeout:
+                    rospy.logwarn("Time out while setting param %s for %s" %
+                                  (req.names[i],self.uav_name) )
+                    result = mavros.srv.GetParametersResponse()
+                    result.status.code = mavros.msg.Error.MAV_TIMEOUT
+                    return result
+
+            #******************************************************************
+            #   Ensure that parameter has been set (at all)
+            #******************************************************************
+            if not req.names[i] in self.connection.params:
+                rospy.logwarn("Parameter %s was not set for %s after request" %
+                              (req.names[i], self.uav_name) )
+                result = mavros.srv.GetParametersResponse()
+                result.status.code = mavros.msg.Error.PARAM_NOT_SET
+                return result
+
+            #******************************************************************
+            #   Also ensure that it is set to the *right* value!
+            #******************************************************************
+            elif req.values[i] != self.connection.params[ req.names[i] ]:
+                rospy.logwarn("Parameter %s for %s has wrong value" %
+                              (req.names[i], self.uav_name) )
+                result = mavros.srv.GetParametersResponse()
+                result.status.code = mavros.msg.Error.BAD_PARAM_VALUE
+                return result
+
+        #**********************************************************************
+        #   If we get this far, return SUCCESS
+        #**********************************************************************
+        result = mavros.srv.GetParametersResponse()
+        result.status.code = mavros.msg.Error.SUCCESS
+        return result
 
     def command_cb(self, req):
         start_time = rospy.Time.now().to_sec()
