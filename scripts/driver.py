@@ -552,10 +552,15 @@ class MavRosProxy:
                       self.get_params_cb)
 
         self.connection.waypoint_request_list_send()
+        timeout_in_secs = self.command_timeout.to_sec()
         while not rospy.is_shutdown():
-            msg = self.connection.recv_match(blocking=False)
+            msg = self.connection.recv_match(blocking=True,
+                                             timeout=timeout_in_secs)
             if not msg:
-                continue
+               rospy.logwarn("Nothing received from %s for %f seconds" %
+                             (self.uav_name, timeout_in_secs) )
+               continue
+
             msg_type = msg.get_type()
             if msg_type == "BAD_DATA":
                 if print_msg(msg.data):
