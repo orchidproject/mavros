@@ -402,26 +402,24 @@ class MavRosProxy:
 
     def clear_waypoints_cmd(self,req):
         """Executes a clear waypoints command on MAV"""
-            self.mission_result = -1
-            self.connection.waypoint_clear_all_send()
-            start_time = rospy.Time.now()
-            while self.mission_ack < start_time:
-                rospy.sleep(0.1)
-                if rospy.Time.now() - start_time > self.command_timeout:
-                    rospy.loginfo("[MAVROS:%s]Timeout while clearing waypoints..." % self.uav_name)
-                    # self.seq -= self.state.missions
-                    return False
-                rospy.sleep(0.01)
-            if self.mission_result == mav.MAV_MISSION_ACCEPTED:
-                rospy.loginfo("[MAVROS:%s]Cleared waypoints" % self.uav_name)
-                self.state.current = 0
-                self.state.missions = 0
-                return True
-            else:
-                rospy.loginfo("[MAVROS:%s]Failed to clear waypoints[%d]" % (self.uav_name, self.mission_result))
+        self.mission_result = -1
+        self.connection.waypoint_clear_all_send()
+        start_time = rospy.Time.now()
+        while self.mission_ack < start_time:
+            rospy.sleep(0.1)
+            if rospy.Time.now() - start_time > self.command_timeout:
+                rospy.loginfo("[MAVROS:%s]Timeout while clearing waypoints..." % self.uav_name)
+                # self.seq -= self.state.missions
                 return False
-
-        
+        if self.mission_result == mav.MAV_MISSION_ACCEPTED:
+            rospy.loginfo("[MAVROS:%s]Cleared waypoints" % self.uav_name)
+            self.state.current = 0
+            self.state.missions = 0
+            return True
+        else:
+            rospy.loginfo("[MAVROS:%s]Failed to clear waypoints[%d]" % (self.uav_name, self.mission_result))
+            return False
+            
     def get_waypoints_cb(self, req):
         pass
 
