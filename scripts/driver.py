@@ -70,6 +70,7 @@ import rospy
 from std_msgs.msg import Header
 from sensor_msgs.msg import NavSatFix, NavSatStatus, TimeReference
 from geometry_msgs.msg import Vector3
+from mavros.msg import Error
 import mavros.msg
 import mavros.srv
 
@@ -97,6 +98,18 @@ NE_CONSTANT = 1
 #******************************************************************************
 ADHOC_MANUAL = 99
 
+#******************************************************************************
+#   Convenience Error definitions for returning results from callbacks
+#******************************************************************************
+SUCCESS_ERR                  = Error(code=Error.SUCCESS)
+FAILURE_ERR                  = Error(code=Error.FAILURE)
+UNSUPPORTED_MODE_ERR         = Error(code=Error.UNSUPPORTED_MODE)
+UNSUPPORTED_FRAME_ERR        = Error(code=Error.UNSUPPORTED_FRAME)
+COORDS_OUT_OF_RANGE_ERR      = Error(code=Error.COORDS_OUT_OF_RANGE)
+MAV_TIMEOUT_ERR              = Error(code=Error.MAV_TIMEOUT)
+PARAM_NOT_SET_ERR            = Error(code=Error.PARAM_NOT_SET)
+BAD_PARAM_VALUE_ERR          = Error(code=Error.BAD_PARAM_VALUE)
+KEY_VALUE_COUNT_MISMATCH_ERR = Error(code=Error.KEY_VALUE_COUNT_MISMATCH)
 
 class MavRosProxy:
     def __init__(self, name, device, baudrate, source_system=255, command_timeout=5, altitude_min=1, altitude_max=5):
@@ -164,6 +177,11 @@ class MavRosProxy:
         '''
 
         #**********************************************************************
+        #   Initialise remote service response
+        #**********************************************************************
+        result = mavros.srv.GetParametersResponse()
+
+        #**********************************************************************
         # Fetch all parameter values from MAV
         #**********************************************************************
         rospy.loginfo("Fetching MAV Parameters for %s" % self.uav_name)
@@ -175,18 +193,16 @@ class MavRosProxy:
             if (rospy.Time.now() - start_time) > self.command_timeout:
                 rospy.logwarn("Request for parameters from %s timed out" %
                               self.uav_name)
-                result = mavros.srv.GetParametersResponse()
-                result.status.code = mavros.msg.Error.MAV_TIMEOUT
+                result.status = MAV_TIMEOUT_ERR
                 return result
 
         #**********************************************************************
         # If we get this far, return parameter values and indicate successful
         # execution.
         #**********************************************************************
-        result = mavros.srv.GetParametersResponse()
         result.keys = self.connection.params.keys()
         result.values = self.connection.params.values()
-        result.status.code = mavros.msg.Error.SUCCESS
+        result.status = SUCCESS_ERR
         rospy.loginfo("Returning MAV Parameters for %s" % self.uav_name)
         return result
 
@@ -202,13 +218,17 @@ class MavRosProxy:
         '''
 
         #**********************************************************************
+        #   Initialise remote service response
+        #**********************************************************************
+        result = mavros.srv.GetParametersResponse()
+
+        #**********************************************************************
         #   Ensure that number of keys matches number of values
         #**********************************************************************
         if len(req.values) != len(req.keys):
             rospy.logerr(""""[MAVROS:%s] number of parameter keys must match \
                             number of values!""")
-            result = mavros.srv.GetParametersResponse()
-            result.status.code = mavros.msg.Error.KEY_VALUE_COUNT_MISMATCH
+            result.status = KEY_VALUE_COUNT_MISMATCH_ERR
             return result
 
         #**********************************************************************
@@ -234,8 +254,7 @@ class MavRosProxy:
                 if (rospy.Time.now() - start_time) > self.command_timeout:
                     rospy.logwarn("Time out while setting param %s for %s" %
                                   (req.names[i],self.uav_name) )
-                    result = mavros.srv.GetParametersResponse()
-                    result.status.code = mavros.msg.Error.MAV_TIMEOUT
+                    result.status = MAV_TIMEOUT_ERR
                     return result
 
             #******************************************************************
@@ -244,8 +263,7 @@ class MavRosProxy:
             if not req.names[i] in self.connection.params:
                 rospy.logwarn("Parameter %s was not set for %s after request" %
                               (req.names[i], self.uav_name) )
-                result = mavros.srv.GetParametersResponse()
-                result.status.code = mavros.msg.Error.PARAM_NOT_SET
+                result.status = PARAM_NOT_SET_ERR
                 return result
 
             #******************************************************************
@@ -254,15 +272,13 @@ class MavRosProxy:
             elif req.values[i] != self.connection.params[ req.names[i] ]:
                 rospy.logwarn("Parameter %s for %s has wrong value" %
                               (req.names[i], self.uav_name) )
-                result = mavros.srv.GetParametersResponse()
-                result.status.code = mavros.msg.Error.BAD_PARAM_VALUE
+                result.status = BAD_PARAM_VALUE_ERR
                 return result
 
         #**********************************************************************
         #   If we get this far, return SUCCESS
         #**********************************************************************
-        result = mavros.srv.GetParametersResponse()
-        result.status.code = mavros.msg.Error.SUCCESS
+        result.status = SUCCESS_ERR
         return result
 
     def command_cb(self, req):
@@ -380,13 +396,18 @@ class MavRosProxy:
                                               mav.MAV_MODE_FLAG_CUSTOM_MODE_ENABLED, req.custom)
             rospy.loginfo("[MAVROS:%s]Custom mode(%s)..." % (self.uav_name, req.custom))
             return True
-        elif req.command == mavros.srv._Command.CommandRequest.CMD_CLEAR_WAYPOINTS:
-            # self.seq = self.state.missions
+        elif req.command == mavros.srv.CommandRequest.CMD_CLEAR_WAYPOINTS:
+            return clear_waypoints_cmd(self,req)
+        return False
+
+    def clear_waypoints_cmd(self,req):
+        """Executes a clear waypoints command on MAV"""
             self.mission_result = -1
             self.connection.waypoint_clear_all_send()
-            rospy.sleep(0.1)
+            start_time = rospy.Time.now()
             while self.mission_ack < start_time:
-                if rospy.Time.now().to_sec() - start_time > self.command_timeout:
+                rospy.sleep(0.1)
+                if rospy.Time.now() - start_time > self.command_timeout:
                     rospy.loginfo("[MAVROS:%s]Timeout while clearing waypoints..." % self.uav_name)
                     # self.seq -= self.state.missions
                     return False
@@ -399,7 +420,8 @@ class MavRosProxy:
             else:
                 rospy.loginfo("[MAVROS:%s]Failed to clear waypoints[%d]" % (self.uav_name, self.mission_result))
                 return False
-        return False
+
+        
 
     def waypoint_list_cb(self, req):
         old = self.state.missions
