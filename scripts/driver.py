@@ -281,7 +281,7 @@ class MavRosProxy:
         result.status = SUCCESS_ERR
         return result
 
-    def command_cb(self, req):
+    def mav_command_cb(self, req):
         start_time = rospy.Time.now().to_sec()
         if req.command == mavros.srv._Command.CommandRequest.CMD_TAKEOFF:
             if "LAND" not in self.connection.mode_mapping().keys():
@@ -422,8 +422,10 @@ class MavRosProxy:
                 return False
 
         
+    def get_waypoints_cb(self, req):
+        pass
 
-    def waypoint_list_cb(self, req):
+    def set_waypoints_cb(self, req):
         old = self.state.missions
         seq = self.state.current
         if old == 0:
