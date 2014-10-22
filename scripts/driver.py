@@ -35,26 +35,34 @@
 
    SUBSCRIBED TOPICS
    -----------------
-   Topic                Type        Description
-   /uav_name/send_rc    mavors/RC   Sends Remote Control Commands to MAV
+   Topic                        Type    Description
+   /uav_name/manual_control     RC      Sends Remote Control Commands to MAV
 
    PUBLISHED TOPICS
    ----------------
    Topic                    Type                Description
    /uav_name/gps            NavSatFix           Raw GPS fix from MAV
-   /uav_name/state          State               MAV's current mode and mission information
+   /uav_name/state          State               MAV's current mode and mission
+                                                information
    /uav_name/attitude       Attitude            Fused Attitude estimate from MAV
-   /uav_name/status         Status              MAV status info, including battery level
+   /uav_name/status         Status              status including battery level
    /uav_name/filtered_pos   FilteredPosition    Fused Position estimate from MAV
-   /uav_name/time_sync      TimeReference       Estimate of lag between MAV and ROS time,
-                                                used for synchronisation.
+   /uav_name/time_sync      TimeReference       Estimated lag between MAV and
+                                                ROS time, used for
+                                                synchronisation.
 
    SERVICES PROVIDED
    -----------------
    Service                  Type            Description
-   /uav_name/command        Command         Send MAV Command to drone e.g. change mode
-   /uav_name/waypoints      SendWaypoints   Sets waypoint mission list on MAV (overwrites previous)
-   /uav_name/params         Parameters      Gets/Sets Parameters on MAV as key/value pairs
+   /uav_name/mav_command    MAVCommand      Send MAV Command to drone e.g.
+                                            change mode.
+   /uav_name/get_waypoints  GetWaypoints    Gets waypoint mission list from MAV
+   /uav_name/get_params     GetParameters   Gets Parameters from MAV as
+                                            key/value pairs
+   /uav_name/set_waypoints  SetWaypoints    Sets waypoint mission list on MAV
+                                            (overwrites previous).
+   /uav_name/set_params     SetParameters   Sets Parameters on MAV as
+                                            key/value pairs
 
 """
 #******************************************************************************
@@ -112,7 +120,8 @@ BAD_PARAM_VALUE_ERR          = Error(code=Error.BAD_PARAM_VALUE)
 KEY_VALUE_COUNT_MISMATCH_ERR = Error(code=Error.KEY_VALUE_COUNT_MISMATCH)
 
 class MavRosProxy:
-    def __init__(self, name, device, baudrate, source_system=255, command_timeout=5, altitude_min=1, altitude_max=5):
+    def __init__(self, name, device, baudrate, source_system=255,
+                 command_timeout=5, altitude_min=1, altitude_max=5):
         self.uav_name = name
         self.device = device
         self.baudrate = baudrate
@@ -136,15 +145,34 @@ class MavRosProxy:
         self.gps_msg = NavSatFix()
         self.filtered_pos_msg = mavros.msg.FilteredPosition()
 
-        self.pub_gps = rospy.Publisher(self.uav_name + '/gps', NavSatFix, queue_size=10)
-        self.pub_state = rospy.Publisher(self.uav_name + '/state', mavros.msg.State, queue_size=10)
-        self.pub_attitude = rospy.Publisher(self.uav_name + '/attitude', mavros.msg.Attitude, queue_size=10)
-        self.pub_status = rospy.Publisher(self.uav_name + '/status', mavros.msg.Status, queue_size=10)
-        self.pub_filtered_pos = rospy.Publisher(self.uav_name + '/filtered_pos', mavros.msg.FilteredPosition, queue_size=10)
-        self.pub_time_sync = rospy.Publisher(self.uav_name + '/time_sync', TimeReference, queue_size=10)
-        rospy.Subscriber(self.uav_name + "/manual_control", mavros.msg.RC, self.send_rc_cb)
+        #**********************************************************************
+        # Register ROS Publications
+        #**********************************************************************
+        self.pub_gps = rospy.Publisher(self.uav_name + '/gps', NavSatFix,
+                                       queue_size=10)
 
-    def send_rc_cb(self, req):
+        self.pub_state = rospy.Publisher(self.uav_name + '/state',
+                                         mavros.msg.State, queue_size=10)
+
+        self.pub_attitude = rospy.Publisher(self.uav_name + '/attitude',
+                                            mavros.msg.Attitude, queue_size=10)
+
+        self.pub_status = rospy.Publisher(self.uav_name + '/status',
+                                          mavros.msg.Status, queue_size=10)
+
+        self.pub_filtered_pos = rospy.Publisher(self.uav_name + '/filtered_pos',                                                mavros.msg.FilteredPosition,
+                                                queue_size=10)
+
+        self.pub_time_sync = rospy.Publisher(self.uav_name + '/time_sync',
+                                             TimeReference, queue_size=10)
+
+        #**********************************************************************
+        # Register ROS Topic Subscriptions
+        #**********************************************************************
+        rospy.Subscriber(self.uav_name + "/manual_control", mavros.msg.RC,
+                         self.manual_control_cb)
+
+    def manual_control_cb(self, req):
         '''Callback for Manual Remote Control Inputs
 
            Simply sends RC inputs to MAV
@@ -153,16 +181,17 @@ class MavRosProxy:
            Parameters:
            req -- mavros/RC message
         '''
-        self.connection.mav.rc_channels_override_send(self.connection.target_system,
-                                                      self.connection.target_component,
-                                                      req.channel[0],
-                                                      req.channel[1],
-                                                      req.channel[2],
-                                                      req.channel[3],
-                                                      req.channel[4],
-                                                      req.channel[5],
-                                                      req.channel[6],
-                                                      req.channel[7])
+        self.connection.mav.rc_channels_override_send(
+                self.connection.target_system,
+                self.connection.target_component,
+                req.channel[0],
+                req.channel[1],
+                req.channel[2],
+                req.channel[3],
+                req.channel[4],
+                req.channel[5],
+                req.channel[6],
+                req.channel[7])
 
     def get_params_cb(self, req):
         '''Callback for getting parameters from MAV
@@ -285,14 +314,15 @@ class MavRosProxy:
         start_time = rospy.Time.now().to_sec()
         if req.command == mavros.srv._Command.CommandRequest.CMD_TAKEOFF:
             if "LAND" not in self.connection.mode_mapping().keys():
-                rospy.loginfo("[MAVROS:%s]This vehicle can not fly." % self.uav_name)
+                rospy.loginfo("[MAVROS:%s]This vehicle can not fly." %
+                              self.uav_name)
                 return False
             if self.state.custom_mode != self.connection.mode_mapping()["LAND"]:
                 rospy.loginfo("[MAVROS:%s]Already in TAKEOFF" % self.uav_name)
                 return True
 
-            self.connection.mav.command_long_send(self.connection.target_system, 0,
-                                                  mav.MAV_CMD_NAV_TAKEOFF,
+            self.connection.mav.command_long_send(self.connection.target_system,
+                                                  0, mav.MAV_CMD_NAV_TAKEOFF,
                                                   0, 0, 0, 0, 0, 0, 0, 0)
 
             rospy.sleep(0.1)
@@ -408,7 +438,8 @@ class MavRosProxy:
         while self.mission_ack < start_time:
             rospy.sleep(0.1)
             if rospy.Time.now() - start_time > self.command_timeout:
-                rospy.loginfo("[MAVROS:%s]Timeout while clearing waypoints..." % self.uav_name)
+                rospy.loginfo("[MAVROS:%s]Timeout while clearing waypoints..." %
+                              self.uav_name)
                 # self.seq -= self.state.missions
                 return False
         if self.mission_result == mav.MAV_MISSION_ACCEPTED:
@@ -417,7 +448,8 @@ class MavRosProxy:
             self.state.missions = 0
             return True
         else:
-            rospy.loginfo("[MAVROS:%s]Failed to clear waypoints[%d]" % (self.uav_name, self.mission_result))
+            rospy.loginfo("[MAVROS:%s]Failed to clear waypoints[%d]" %
+                          (self.uav_name, self.mission_result))
             return False
             
     def get_waypoints_cb(self, req):
@@ -430,7 +462,7 @@ class MavRosProxy:
             start_time = rospy.Time.now().to_sec()
             self.connection.waypoint_count_send(len(req.waypoints))
             while self.list_ack < start_time:
-                if rospy.Time.now().to_sec() - start_time > self.command_timeout:
+                if rospy.Time.now() - start_time > self.command_timeout:
                     rospy.loginfo("[MAVROS:%s]Time out on sending MISSION_COUNT" % self.uav_name)
                     return False
         #     dummy = mavros.msg.Waypoint()
