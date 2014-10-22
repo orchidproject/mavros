@@ -1,0 +1,11 @@
+<launch>
+  <arg name="address" default="192.168.1.2" />
+  <arg name="file" default="$(find ar2mav)/drones.yaml"/>
+  
+  <rosparam file="$(arg file)" command="load" />
+  <node pkg="ar2mav" type="arproxy.py" name="arproxy" output="screen" args="-f $(arg file) -l $(arg address) -v 1 -q" />
+  
+  <rosparam file="$(find mavros)/drone_params.yaml" command="load" />
+  <node pkg="mavros" type="driver.py" name="mavros_parrot" output="screen" args="-n Parrot -l $(arg address) -r" />
+
+</launch>
