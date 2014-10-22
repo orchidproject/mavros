@@ -6,10 +6,10 @@ uint8 autocontinue
 # Range (in metres) that MAV must get within waypoint to consider
 # it reached. Required because reaching waypoint exactly is 
 # impossible
-float32 range
+float32 radius 
 
-# wait time (in seconds) to hold at waypoint before continuing
-float32 waitTime
+# wait time to hold at waypoint before continuing
+duration waitTime
 
 # Coordinate frame in which x,y,z coordinates are specified
 # Valid values are defined below

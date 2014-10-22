@@ -13,3 +13,4 @@ uint8 MAV_TIMEOUT = 5          # attempt to communicate with MAV timed out
 uint8 PARAM_NOT_SET = 6        # requested parameter is undefined
 uint8 BAD_PARAM_VALUE = 7      # requested parameter has wrong value
 uint8 KEY_VALUE_COUNT_MISMATCH = 8  # number of keys and values don't match
+uint8 MAV_COMMAND_ERROR = 9  # MAV reported an error in command acknowledgement
