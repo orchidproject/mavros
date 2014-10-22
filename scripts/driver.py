@@ -488,9 +488,9 @@ class MavRosProxy:
         #**********************************************************************
         #   Wait for mission acknowledgement
         #**********************************************************************
-        while self.last_wp_ack_time < start_time:
+        while self.last_wp_ack_time < from_time:
             rospy.sleep(BUSY_WAIT_INTERVAL)
-            if rospy.Time.now() - start_time > self.command_timeout:
+            if rospy.Time.now() - from_time > self.command_timeout:
                 rospy.logerr("[MAVROS:%s]Timeout while updating waypoints..." %
                               self.uav_name)
                 return MAV_TIMEOUT_ERR
@@ -516,6 +516,7 @@ class MavRosProxy:
         #**********************************************************************
         #   Clear our own internal list of waypoints
         #**********************************************************************
+        rospy.logerr("[MAVROS:%s]Clearing waypoints on MAV" % self.uav_name)
         self.state.current_waypoint = 0
         self.state.num_of_waypoints = 0
         self.current_waypoints = []
@@ -531,7 +532,7 @@ class MavRosProxy:
         #**********************************************************************
         #   Wait for MAV to acknowledge receipt of all waypoints
         #**********************************************************************
-        return self.wait_for_wp_ack(self,start_time)
+        return self.wait_for_wp_ack(start_time)
             
     def get_waypoints_cb(self, req):
         pass
@@ -541,6 +542,10 @@ class MavRosProxy:
 
            Sets new waypoint list on MAV, overwriting any previous.
            Implements mavlink set waypoints protocol.
+
+           NOTE: On some devices, setting the current wp to 0 has special
+           meaning e.g. tell the drone to go home. This implementation makes
+           no allowances - TODO figure out what to do about this.
 
            See mavros/SetWaypoints.srv definition.
         """
@@ -591,7 +596,7 @@ class MavRosProxy:
         #**********************************************************************
         #   Try to clear waypoint list
         #**********************************************************************
-        status = self.clear_waypoints_cmd():
+        status = self.clear_waypoints_cmd()
         if SUCCESS_ERR != status:
             rospy.logerr("[MAVROS:%s] failed to clear waypoints prior to"
                          " updating list" % self.uav_name)
@@ -619,11 +624,14 @@ class MavRosProxy:
         #**********************************************************************
         #   Wait for MAV to acknowledge receipt of all waypoints
         #**********************************************************************
-        status = self.wait_for_wp_ack(self,start_time)
+        status = self.wait_for_wp_ack(start_time)
         if SUCCESS_ERR != status:
             rospy.logerr("[MAVROS:%s] Failed to successfully send waypoints" %
                           self.uav_name)
             return status
+
+        rospy.loginfo("[MAVROS:%s] waypoints transmitted successfully" %
+                      self.uav_name)
 
         #**********************************************************************
         #   Set current mission to the next waypoint
@@ -694,7 +702,7 @@ class MavRosProxy:
         self.last_wp_request_time = rospy.Time.now()
         rospy.loginfo(
             "[MAVROS:%s]MISSION_REQUEST: Waypoint %d sent for system %d"
-            "for component %d" % (self.uav_name, msg.seq, msg.target_system,
+            " for component %d" % (self.uav_name, msg.seq, msg.target_system,
                                   msg.target_component))
 
     def start(self):
@@ -744,7 +752,7 @@ class MavRosProxy:
         #**********************************************************************
         # Receive and process mavlink messages one at a time forever 
         #**********************************************************************
-        timeout_in_secs = self.command_timeout
+        timeout_in_secs = self.command_timeout.to_sec()
         while not rospy.is_shutdown():
 
             #******************************************************************
