@@ -311,7 +311,7 @@ class MavRosProxy:
         return result
 
     def mav_command_cb(self, req):
-        start_time = rospy.Time.now().to_sec()
+        start_time = rospy.Time.now()
         if req.command == mavros.srv._Command.CommandRequest.CMD_TAKEOFF:
             if "LAND" not in self.connection.mode_mapping().keys():
                 rospy.loginfo("[MAVROS:%s]This vehicle can not fly." %
@@ -327,7 +327,7 @@ class MavRosProxy:
 
             rospy.sleep(0.1)
             while self.state.custom_mode == self.connection.mode_mapping()["LAND"]:
-                if rospy.Time.now().to_sec() - start_time > self.command_timeout:
+                if rospy.Time.now() - start_time > self.command_timeout:
                     rospy.loginfo(
                         "[MAVROS:%s]Timeout while trying to takeoff..." % self.uav_name + str(self.state.custom_mode))
                     return False
@@ -346,7 +346,7 @@ class MavRosProxy:
                                                   0, 0, 0, 0, 0, 0, 0, 0)
             rospy.sleep(0.1)
             while self.state.custom_mode != self.connection.mode_mapping()["LAND"]:
-                if rospy.Time.now().to_sec() - start_time > self.command_timeout:
+                if rospy.Time.now() - start_time > self.command_timeout:
                     rospy.loginfo(
                         "[MAVROS:%s]Timeout while trying to land..." % self.uav_name + str(self.state.custom_mode))
                     return False
@@ -391,7 +391,7 @@ class MavRosProxy:
                                               mode)
             rospy.sleep(0.1)
             while self.state.custom_mode != mode:
-                if rospy.Time.now().to_sec() - start_time > self.command_timeout:
+                if rospy.Time.now() - start_time > self.command_timeout:
                     rospy.loginfo("[MAVROS:%s]Timeout while going to MANUAL..." % self.uav_name)
                     return False
                 rospy.sleep(0.01)
@@ -410,7 +410,7 @@ class MavRosProxy:
                                               self.connection.mode_mapping()["AUTO"])
             rospy.sleep(0.1)
             while self.state.custom_mode != self.connection.mode_mapping()["AUTO"]:
-                if rospy.Time.now().to_sec() - start_time > self.command_timeout:
+                if rospy.Time.now() - start_time > self.command_timeout:
                     rospy.loginfo("[MAVROS:%s]Timeout while going to AUTO..." % self.uav_name)
                     return False
                 rospy.sleep(0.01)
@@ -456,23 +456,23 @@ class MavRosProxy:
         pass
 
     def set_waypoints_cb(self, req):
-        old = self.state.missions
-        seq = self.state.current
+        """Callback implementing mavros/SetWaypoints service.
+
+           Sets new waypoint list on MAV, overwriting any previous.
+           Implements mavlink set waypoints protocol.
+
+           See mavros/SetWaypoints.srv definition.
+        """
+        old = self.state.num_of_waypoints
+        seq = self.state.current_waypoint
         if old == 0:
-            start_time = rospy.Time.now().to_sec()
+            start_time = rospy.Time.now()
             self.connection.waypoint_count_send(len(req.waypoints))
             while self.list_ack < start_time:
                 if rospy.Time.now() - start_time > self.command_timeout:
                     rospy.loginfo("[MAVROS:%s]Time out on sending MISSION_COUNT" % self.uav_name)
                     return False
-        #     dummy = mavros.msg.Waypoint()
-        #     dummy.frame = mav.MAV_FRAME_GLOBAL_RELATIVE_ALT
-        #     dummy.type = mav.MAV_CMD_NAV_WAYPOINT
-        #     dummy.autocontinue = 0
-        #     dummy.latitude = self.filtered_pos_msg.latitude
-        #     dummy.longitude = self.filtered_pos_msg.longitude
-        #     dummy.altitude = self.altitude_min + 0.5
-        #     self.transmit_waypoint(dummy)
+
         # Send entire list of waypoints
         for i in range(len(req.waypoints)):
             if req.waypoints[i].frame == mavros.msg.Waypoint.TYPE_GLOBAL:
@@ -492,10 +492,10 @@ class MavRosProxy:
             if not self.transmit_waypoint(req.waypoints[i]):
                 rospy.loginfo("[MAVROS:%s]Failed to send %d'th waypoint" % (self.uav_name, i))
                 return False
-        start_time = rospy.Time.now().to_sec()
+        start_time = rospy.Time.now()
         if seq == 0:
-            while self.state.current == 0:
-                if rospy.Time.now().to_sec() - start_time > self.command_timeout:
+            while self.state.current_waypoint == 0:
+                if rospy.Time.now() - start_time > self.command_timeout:
                     rospy.loginfo("[MAVROS:%s]Time out setting the current mission" % self.uav_name)
                     return False
                 self.connection.mav.mission_set_current_send(self.connection.target_system,
@@ -531,8 +531,8 @@ class MavRosProxy:
                                                   waypoint.altitude)
             rospy.sleep(0.1)
             self.connection.waypoint_request_list_send()
-            while old != self.state.missions - 1:
-                if (rospy.Time.now().to_sec() - start_time) > self.command_timeout:
+            while old != self.state.num_of_waypoints - 1:
+                if (rospy.Time.now() - start_time) > self.command_timeout:
                     rospy.loginfo("[MAVROS:%s]Timeout while sending waypoint..." % self.uav_name)
                     return False
                 if self.mission_ack > start_time:
@@ -584,7 +584,7 @@ class MavRosProxy:
                       self.get_params_cb)
 
         self.connection.waypoint_request_list_send()
-        timeout_in_secs = self.command_timeout.to_sec()
+        timeout_in_secs = self.command_timeout
         while not rospy.is_shutdown():
             msg = self.connection.recv_match(blocking=True,
                                              timeout=timeout_in_secs)
@@ -688,8 +688,8 @@ class MavRosProxy:
                 # msg.aspd_error, msg.xtrack_error)
 
             elif msg_type == "MISSION_CURRENT":
-                self.state.current = msg.seq
-                self.last_current = rospy.Time.now().to_sec()
+                self.state.current_waypoint = msg.seq
+                self.last_current = rospy.Time.now()
                 # self.current_mission_msg.header.stamp = rospy.Time.now()
                 # self.current_mission_msg.mission_num = msg.seq
                 # self.pub_current_mission.publish(self.current_mission_msg)
@@ -705,22 +705,22 @@ class MavRosProxy:
                 # msg.x, msg.y, msg.z)
 
             elif msg_type == "MISSION_COUNT":
-                self.state.missions = msg.count
+                self.state.num_of_waypoints = msg.count
                 rospy.loginfo("[MAVROS:%s]MISSION_COUNT: Number of Mission Items - %s" % (self.uav_name, str(msg.count)))
 
             elif msg_type == "MISSION_ACK":
-                self.mission_ack = rospy.Time.now().to_sec()
+                self.mission_ack = rospy.Time.now()
                 self.mission_result = msg.type
                 rospy.loginfo(
                     "[MAVROS:%s]MISSION_ACK: Mission Message ACK with response - %s" % (self.uav_name, str(msg.type)))
 
             elif msg_type == "COMMAND_ACK":
-                self.command_ack = rospy.Time.now().to_sec()
+                self.command_ack = rospy.Time.now()
                 rospy.loginfo(
                     "[MAVROS:%s]COMMAND_ACK: Command Message ACK with result - %s" % (self.uav_name, str(msg.result)))
 
             elif msg_type == "MISSION_REQUEST":
-                self.list_ack = rospy.Time.now().to_sec()
+                self.list_ack = rospy.Time.now()
                 rospy.loginfo(
                     "[MAVROS:%s]MISSION_REQUEST: Mission Request for system %d for component %d with result %d"
                     % (self.uav_name, msg.target_system, msg.target_component, msg.seq))
