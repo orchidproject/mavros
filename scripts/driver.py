@@ -440,12 +440,11 @@ class MavRosProxy:
             if rospy.Time.now() - start_time > self.command_timeout:
                 rospy.loginfo("[MAVROS:%s]Timeout while clearing waypoints..." %
                               self.uav_name)
-                # self.seq -= self.state.missions
                 return False
         if self.mission_result == mav.MAV_MISSION_ACCEPTED:
             rospy.loginfo("[MAVROS:%s]Cleared waypoints" % self.uav_name)
-            self.state.current = 0
-            self.state.missions = 0
+            self.state.current_waypoint = 0
+            self.state.num_of_waypoints = 0
             return True
         else:
             rospy.loginfo("[MAVROS:%s]Failed to clear waypoints[%d]" %
@@ -504,8 +503,8 @@ class MavRosProxy:
         else:
             while self.last_current < start_time:
                 rospy.sleep(0.1)
-            while self.state.current != seq:
-                if rospy.Time.now().to_sec() - start_time > self.command_timeout:
+            while self.state.current_waypoint != seq:
+                if rospy.Time.now() - start_time > self.command_timeout:
                     rospy.loginfo("[MAVROS:%s]Time out setting the current mission" % self.uav_name)
                     return False
                 self.connection.mav.mission_set_current_send(self.connection.target_system,
@@ -517,12 +516,12 @@ class MavRosProxy:
     def transmit_waypoint(self, waypoint):
         if not (self.altitude_min <= waypoint.altitude <= self.altitude_max):
             return False
-        old = self.state.missions
+        old = self.state.num_of_waypoints
         while True:
             self.mission_result = -1
-            start_time = rospy.Time.now().to_sec()
+            start_time = rospy.Time.now()
             self.connection.mav.mission_item_send(self.connection.target_system, self.connection.target_component,
-                                                  self.state.missions,
+                                                  self.state.num_of_waypoints,
                                                   waypoint.frame,
                                                   waypoint.type, 0, waypoint.autocontinue,
                                                   waypoint.params[0], waypoint.params[1],
@@ -542,7 +541,7 @@ class MavRosProxy:
             # self.seq += 1
             rospy.sleep(0.1)
             break
-        return old == (self.state.missions - 1)
+        return old == (self.state.num_of_waypoints - 1)
 
     def start(self):
 
