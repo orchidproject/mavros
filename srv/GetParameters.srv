@@ -1,4 +1,4 @@
 ---
-string[] names
+string[] keys
 float32[] values
 Error status

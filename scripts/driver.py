@@ -220,14 +220,14 @@ class MavRosProxy:
         #**********************************************************************
         #   Initialise remote service response
         #**********************************************************************
-        result = mavros.srv.GetParametersResponse()
+        result = mavros.srv.SetParametersResponse()
 
         #**********************************************************************
         #   Ensure that number of keys matches number of values
         #**********************************************************************
         if len(req.values) != len(req.keys):
-            rospy.logerr(""""[MAVROS:%s] number of parameter keys must match \
-                            number of values!""")
+            rospy.logerr("[MAVROS:%s] number of parameter keys must match" 
+                         " number of values!" % self.uav_name)
             result.status = KEY_VALUE_COUNT_MISMATCH_ERR
             return result
 
@@ -241,10 +241,10 @@ class MavRosProxy:
             #******************************************************************
             start_time = rospy.Time.now()
             rospy.loginfo("[MAVROS:%s] SETTING: " % self.uav_name +
-                          req.names[i] + "=" + str(req.values[i]))
+                          req.keys[i] + "=" + str(req.values[i]))
             self.param_req = True
             self.connection.param_fetch_complete = False
-            self.connection.param_set_send(req.names[i], req.values[i])
+            self.connection.param_set_send(req.keys[i], req.values[i])
 
             #******************************************************************
             # Wait for operation to complete, or time out
@@ -253,25 +253,25 @@ class MavRosProxy:
                 rospy.sleep(0.1)
                 if (rospy.Time.now() - start_time) > self.command_timeout:
                     rospy.logwarn("Time out while setting param %s for %s" %
-                                  (req.names[i],self.uav_name) )
+                                  (req.keys[i],self.uav_name) )
                     result.status = MAV_TIMEOUT_ERR
                     return result
 
             #******************************************************************
             #   Ensure that parameter has been set (at all)
             #******************************************************************
-            if not req.names[i] in self.connection.params:
+            if not req.keys[i] in self.connection.params:
                 rospy.logwarn("Parameter %s was not set for %s after request" %
-                              (req.names[i], self.uav_name) )
+                              (req.keys[i], self.uav_name) )
                 result.status = PARAM_NOT_SET_ERR
                 return result
 
             #******************************************************************
             #   Also ensure that it is set to the *right* value!
             #******************************************************************
-            elif req.values[i] != self.connection.params[ req.names[i] ]:
+            elif req.values[i] != self.connection.params[ req.keys[i] ]:
                 rospy.logwarn("Parameter %s for %s has wrong value" %
-                              (req.names[i], self.uav_name) )
+                              (req.keys[i], self.uav_name) )
                 result.status = BAD_PARAM_VALUE_ERR
                 return result
 
@@ -545,10 +545,10 @@ class MavRosProxy:
         rospy.Service(self.uav_name + "/get_waypoints", mavros.srv.GetWaypoints,
                       self.get_waypoints_cb)
 
-        rospy.Service(self.uav_name + "/set_params", mavros.srv.GetParameters,
+        rospy.Service(self.uav_name + "/set_params", mavros.srv.SetParameters,
                       self.set_params_cb)
 
-        rospy.Service(self.uav_name + "/get_params", mavros.srv.SetParameters,
+        rospy.Service(self.uav_name + "/get_params", mavros.srv.GetParameters,
                       self.get_params_cb)
 
         self.connection.waypoint_request_list_send()
