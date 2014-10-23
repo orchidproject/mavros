@@ -54,6 +54,8 @@
   <run_depend>sensor_msgs</run_depend>
   <run_depend>std_msgs</run_depend>
   <run_depend>uav_utils</run_depend>
+  <run_depend>diagnostic_updater</run_depend>
+  <run_depend>diagnostic_msgs</run_depend>
 
   <!-- The export tag contains other, unspecified, tags -->
   <export>

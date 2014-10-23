@@ -82,6 +82,8 @@ from geometry_msgs.msg import Vector3
 from mavros.msg import Error
 import mavros.msg
 import mavros.srv
+import diagnostic_updater
+import diagnostic_msgs
 
 #******************************************************************************
 # Import mavlink packages
@@ -126,6 +128,21 @@ MIN_VALID_LATITUDE  = -90.0
 MAX_VALID_LATITUDE  = +90.0
 MIN_VALID_LONGITUDE = -180.0
 MAX_VALID_LONGITUDE = +180.0
+
+#******************************************************************************
+#   ROS Diagnostic error levels
+#******************************************************************************
+DIAG_STALE = diagnostic_msgs.msg.DiagnosticStatus.STALE
+DIAG_ERROR = diagnostic_msgs.msg.DiagnosticStatus.ERROR
+DIAG_WARN  = diagnostic_msgs.msg.DiagnosticStatus.WARN
+DIAG_OK    = diagnostic_msgs.msg.DiagnosticStatus.OK
+
+#******************************************************************************
+#   Constants for controlling diagnostics
+#******************************************************************************
+DIAG_UPDATE_FREQ = rospy.Duration(secs=0.2) # how often to update diagnostics
+LOW_BATTERY_THRESHOLD = 10 # warn if battery level remaining is below this
+MAX_HEARTBEAT_INTERVAL = rospy.Duration(secs=3.0) # max time between heartbeats
 
 #******************************************************************************
 #   Return status flags for sending to MAV
@@ -197,8 +214,16 @@ class MavRosProxy:
         # Containers for messages we need to publish
         #**********************************************************************
         self.state = mavros.msg.State()
+        self.status_msg = mavros.msg.Status()
         self.gps_msg = NavSatFix()
         self.filtered_pos_msg = mavros.msg.FilteredPosition()
+
+        #**********************************************************************
+        #   ROS Diagnostics Updater
+        #**********************************************************************
+        self.diag_updater = diagnostic_updater.Updater()
+        self.diag_updater.setHardwareID("%s-mavros-driver" % self.uav_name)
+        self.diag_updater.add("diagnostics",self.produce_diagnostics)
 
         #**********************************************************************
         # Register ROS Publications
@@ -227,6 +252,61 @@ class MavRosProxy:
         #**********************************************************************
         rospy.Subscriber(self.uav_name + "/manual_control", mavros.msg.RC,
                          self.manual_control_cb)
+
+    def update_diagnostics(self, event):
+        """Callback for updating diagnostics"""
+
+        self.diag_updater.update()
+
+    def produce_diagnostics(self, status):
+        """Callback for filling in ROS diagnostic messages
+
+           Parameters
+           status - DiagnosticStatusWrapper used to fill in current next
+                    status message
+
+           Returns updated status
+        """
+
+        #**********************************************************************
+        #   Decide what error status to return and fill in summary
+        #**********************************************************************
+        if len(self.current_waypoints) != len(self.waypoints_synced_with_mav):
+            status.summary(DIAG_ERROR, "Inconsistent internal waypoint count.")
+
+        elif self.connection is None:
+            status.summary(DIAG_WARN, "No connection yet with MAV.")
+
+        elif len(self.current_waypoints) != self.state.num_of_waypoints:
+            status.summary(DIAG_ERROR, "Waypoint count out of sync with MAV.")
+
+        elif LOW_BATTERY_THRESHOLD > self.status_msg.battery_remaining:
+            status.summary(DIAG_WARN, "Low battery!!")
+
+        elif rospy.Time.now() - self.state.header.stamp > \
+            MAX_HEARTBEAT_INTERVAL:
+
+            status.summary(DIAG_STALE, "Connection with MAV gone stale")
+
+        else:
+            status.summary(DIAG_OK, "Driver status OK")
+
+        #**********************************************************************
+        #   Report useful state variables
+        #**********************************************************************
+        status.add("latitude", self.filtered_pos_msg.latitude)
+        status.add("longitude", self.filtered_pos_msg.longitude)
+        status.add("altitude", self.filtered_pos_msg.relative_altitude)
+        status.add("mission count", self.state.num_of_waypoints)
+        status.add("mission", self.state.current_waypoint)
+        status.add("base mode", self.state.base_mode)
+        status.add("custom mode", self.state.custom_mode)
+        status.add("MAV system status", self.state.system_status)
+        status.add("Battery voltage", self.status_msg.battery_voltage)
+        status.add("Battery current", self.status_msg.battery_current)
+        status.add("Battery remaining", self.status_msg.battery_remaining) 
+
+        return status
 
     def manual_control_cb(self, req):
         '''Callback for Manual Remote Control Inputs
@@ -602,8 +682,6 @@ class MavRosProxy:
         #   Clear our own internal list of waypoints
         #**********************************************************************
         rospy.logerr("[MAVROS:%s]Clearing waypoints on MAV" % self.uav_name)
-        self.state.current_waypoint = 0
-        self.state.num_of_waypoints = 0
         self.current_waypoints = []
         self.waypoints_synced_with_mav = []
            
@@ -616,8 +694,12 @@ class MavRosProxy:
 
         #**********************************************************************
         #   Wait for MAV to acknowledge receipt of all waypoints
+        #   and update MAV waypoint state information on success
         #**********************************************************************
-        return self.wait_for_wp_ack(start_time)
+        status = self.wait_for_wp_ack(start_time)
+        if SUCCESS_ERR == status:
+            self.state.num_of_waypoints = 0
+        return status
             
     def get_waypoints_cb(self, req):
         """Request list of waypoints from MAV
@@ -971,6 +1053,11 @@ class MavRosProxy:
     def start(self):
 
         #**********************************************************************
+        #   Start diagnostics running
+        #**********************************************************************
+        diag_timer = rospy.Timer(DIAG_UPDATE_FREQ,self.update_diagnostics)
+
+        #**********************************************************************
         # Try to establish connection with MAV
         #**********************************************************************
         while not rospy.is_shutdown():
@@ -1083,13 +1170,13 @@ class MavRosProxy:
                                           msg.yawspeed)
 
             elif msg_type == "SYS_STATUS":
-                status_msg = mavros.msg.Status()
-                status_msg.header.stamp = rospy.Time.now()
-                status_msg.battery_voltage = msg.voltage_battery
-                status_msg.battery_current = msg.current_battery
-                status_msg.battery_remaining = msg.battery_remaining
-                status_msg.sensors_enabled = msg.onboard_control_sensors_enabled
-                self.pub_status.publish(status_msg)
+                self.status_msg.header.stamp = rospy.Time.now()
+                self.status_msg.battery_voltage = msg.voltage_battery
+                self.status_msg.battery_current = msg.current_battery
+                self.status_msg.battery_remaining = msg.battery_remaining
+                self.status_msg.sensors_enabled = \
+                    msg.onboard_control_sensors_enabled
+                self.pub_status.publish(self.status_msg)
 
             elif msg_type == "GLOBAL_POSITION_INT":
                 self.pub_time_sync.publish(Header(stamp=rospy.Time.now()),
