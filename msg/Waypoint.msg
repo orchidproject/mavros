@@ -1,7 +1,7 @@
-# if autocontinue is 1, MAV should continue to next waypoint
-# otherwise it should be set to zero, to prevent auto continuation
+# if autocontinue is true, MAV should continue to next waypoint
+# otherwise it should be set to False, to prevent auto continuation
 # to next waypoint
-uint8 autocontinue
+bool autocontinue
 
 # Range (in metres) that MAV must get within waypoint to consider
 # it reached. Required because reaching waypoint exactly is 
