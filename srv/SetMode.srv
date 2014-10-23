@@ -1,5 +1,0 @@
-uint8 mode     # mode in which to set MAV
-uint8 MANUAL   # set mode for manual control
-uint8 AUTO     # set mode for automatic control
----
-Error status

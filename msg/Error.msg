@@ -14,3 +14,7 @@ uint8 PARAM_NOT_SET = 6        # requested parameter is undefined
 uint8 BAD_PARAM_VALUE = 7      # requested parameter has wrong value
 uint8 KEY_VALUE_COUNT_MISMATCH = 8  # number of keys and values don't match
 uint8 MAV_COMMAND_ERROR = 9  # MAV reported an error in command acknowledgement
+uint8 UNSUPPORTED_COMMAND = 10 # attempt to execute unsupported command
+uint8 UNDEFINED_COMMAND = 11   # attempt to execute undefined command
+uint8 INTERNAL = 12            # Internal error (indicates a runtime bug)
+uint8 UNDEFINED_WAYPOINT = 13  # Attempt to set mission to undefined waypoint

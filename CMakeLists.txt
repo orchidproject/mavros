@@ -63,8 +63,7 @@ add_message_files(
 add_service_files(
   FILES
   MAVCommand.srv
-  SimpleCommand.srv
-  SetMode.srv
+  SetMission.srv
   GetParameters.srv
   SetParameters.srv
   GetWaypoints.srv

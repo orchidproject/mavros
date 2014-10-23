@@ -1,4 +1,0 @@
-# Generic service type that requires no input and
-# returns only an error status, indicating success or failure
----
-Error status
