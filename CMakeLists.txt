@@ -68,6 +68,9 @@ add_service_files(
   SetParameters.srv
   GetWaypoints.srv
   SetWaypoints.srv
+  AddWaypoints.srv
+  SetMode.srv
+  SimpleCommand.srv
 )
 
 ## Generate actions in the 'action' folder
