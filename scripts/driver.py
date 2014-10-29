@@ -71,6 +71,7 @@
 #******************************************************************************
 import sys, os, math, tf
 from socket import error
+from math import radians, cos, sin, asin, sqrt
 
 #******************************************************************************
 # ROS Imports
@@ -94,6 +95,11 @@ from mavutil import mavlink as mav
 from mavutil import mavlink_connection as mav_connect
 from mavutil import all_printable as print_msg
 from tools import *
+
+#******************************************************************************
+# Used for estimating distances between GPS waypoints
+#******************************************************************************
+RADIUS_OF_EARTH_IN_METRES = 6367 * 1000.0
 
 #******************************************************************************
 # Constants used in calculation of position covariance
@@ -168,6 +174,14 @@ UNDEFINED_COMMAND_ERR        = Error(code=Error.UNDEFINED_COMMAND)
 INTERNAL_ERR                 = Error(code=Error.INTERNAL)
 UNDEFINED_WAYPOINT_ERR       = Error(code=Error.UNDEFINED_WAYPOINT)
 
+class GlobalWaypoint:
+    """Utility class for representing waypoints in global frame"""
+
+    def __init__(self,lat=None,lon=None,alt=None):
+        latitude = lat
+        longitude = lon
+        altitude = alt
+
 class MavRosProxy:
     def __init__(self, name, device, baudrate, source_system=255,
                  command_timeout=5, altitude_min=1, altitude_max=5):
@@ -216,6 +230,8 @@ class MavRosProxy:
         self.state = mavros.msg.State()
         self.status_msg = mavros.msg.Status()
         self.gps_msg = NavSatFix()
+        self.gps_msg.status = NavSatStatus(status=NavSatStatus.STATUS_NO_FIX,
+                service=NavSatStatus.SERVICE_GPS)
         self.filtered_pos_msg = mavros.msg.FilteredPosition()
 
         #**********************************************************************
@@ -224,6 +240,7 @@ class MavRosProxy:
         self.diag_updater = diagnostic_updater.Updater()
         self.diag_updater.setHardwareID("%s-mavros-driver" % self.uav_name)
         self.diag_updater.add("state",self.state_diagnostics_cb)
+        self.diag_updater.add("gps",self.gps_diagnostics_cb)
         self.diag_updater.add("battery",self.battery_diagnostics_cb)
         self.diag_updater.add("mission",self.mission_diagnostics_cb)
 
@@ -289,10 +306,11 @@ class MavRosProxy:
         #**********************************************************************
         #   Fill in message with values related to mission
         #**********************************************************************
-        status.add("latitude", self.filtered_pos_msg.latitude)
-        status.add("longitude", self.filtered_pos_msg.longitude)
-        status.add("altitude", self.filtered_pos_msg.relative_altitude)
+        horz_dist, vert_dist = self.distance_to_next_waypoint()
+        status.add("metres to climb", vert_dist)
+        status.add("metres to travel", horz_dist)
         status.add("mission count", self.state.num_of_waypoints)
+        status.add("internal mission count", len(self.current_waypoints) )
         status.add("mission", self.state.current_waypoint)
 
         #**********************************************************************
@@ -313,6 +331,50 @@ class MavRosProxy:
         else:
             status.summary(DIAG_OK, "current waypoint: %d" %
                     self.state.current_waypoint)
+
+        return status
+
+    def gps_diagnostics_cb(self, status):
+        """Callback for producing gps diagnostics"""
+
+        #**********************************************************************
+        #   If we have no satelite fix, put warning in summary message
+        #**********************************************************************
+        fix =  self.gps_msg.status.status
+        if NavSatStatus.STATUS_FIX == fix:
+            status.summary(DIAG_OK,"fix OK")
+        else:
+            status.summary(DIAG_WARN,"NO GPS FIX!!")
+
+        #**********************************************************************
+        #   Fill in current location 
+        #**********************************************************************
+        status.add("latitude", self.filtered_pos_msg.latitude)
+        status.add("longitude", self.filtered_pos_msg.longitude)
+        status.add("altitude", self.filtered_pos_msg.relative_altitude)
+
+        #**********************************************************************
+        #   Fill in next waypoint location (if defined)
+        #**********************************************************************
+        next_waypoint = self.get_target_waypoint()
+        if next_waypoint is None:
+            status.add("next_latitude",None)
+            status.add("next_longitude",None)
+            status.add("next_altitude",None)
+        else:
+            status.add("next_latitude",next_waypoint.latitude)
+            status.add("next_longitude",next_waypoint.longitude)
+            status.add("next_altitude",next_waypoint.altitude)
+
+        #**********************************************************************
+        #   Fill in distance to next waypoint location
+        #**********************************************************************
+        horz_dist, vert_dist = self.distance_to_next_waypoint()
+        if horz_dist is None or vert_dist is None:
+            status.add("metres_to_go","undefined")
+        else:
+            metres_to_go = math.sqrt(horz_dist**2 + vert_dist**2)
+            status.add("metres_to_go",metres_to_go)
 
         return status
 
@@ -349,6 +411,79 @@ class MavRosProxy:
                 time_since_last_heartbeat.to_sec())
 
         return status
+
+    def get_target_waypoint(self):
+        """Returns the target waypoint if defined
+
+           Returns a dictionary with values for 
+           latitude, longitude and altitude.
+
+           If the current mission is not set, None is returned
+        """
+
+        #**********************************************************************
+        #   If the target waypoint is undefined, then return nothing
+        #**********************************************************************
+        if 0 > self.state.current_waypoint or \
+               self.state.current_waypoint >= len(self.current_waypoints):
+            return None
+
+        target = self.current_waypoints[self.state.current_waypoint]
+
+        if target is None:
+            return None
+        
+        #**********************************************************************
+        #   Otherwise, fill in the values from the current waypoint
+        #   Not mapping between x,y,z is defined in mavros/Waypoint.msg
+        #**********************************************************************
+        result = GlobalWaypoint()
+        result.latitude = target.x
+        result.longitude = target.y
+        result.altitude = target.z
+        return result
+
+    def distance_to_next_waypoint(self):
+        """Calculates the distance to the next waypoint
+
+           Returns a pair: (horizontal distance, vertical distance)
+            
+           - return values are in metres
+           - horizontal distance is always non-negative
+           - vertical distance is negative iff current position is above target
+           - if current mission is undefined, then both values are set to None
+        """
+
+        #**********************************************************************
+        #   If the target waypoint is undefined, then return nothing
+        #**********************************************************************
+        target = self.get_target_waypoint()
+        if target is None:
+            return (None, None)
+
+        #**********************************************************************
+        #   Estimate the distance to travel along the ground (in metres)
+        #   using the Haversine formula
+        #**********************************************************************
+        current = self.filtered_pos_msg
+        lat1 = math.radians(current.latitude)
+        lon1 = math.radians(current.longitude)
+        lat2 = math.radians(target.latitude)
+        lon2 = math.radians(target.longitude)
+
+        dlon = lon2 - lon1 
+        dlat = lat2 - lat1 
+        a = sin(dlat/2)**2 + cos(lat1) * cos(lat2) * sin(dlon/2)**2
+        c = 2 * asin(sqrt(a)) 
+
+        horz_dist = RADIUS_OF_EARTH_IN_METRES * c
+
+        #**********************************************************************
+        #   Calculate vertical distance to travel in metres (up)
+        #**********************************************************************
+        vert_dist = target.altitude - current.altitude
+
+        return horz_dist, vert_dist
 
     def manual_control_cb(self, req):
         '''Callback for Manual Remote Control Inputs
@@ -713,7 +848,7 @@ class MavRosProxy:
         #**********************************************************************
         #   If we get this far, return success
         #**********************************************************************
-        rospy.loginfo("[MAVROS:%s] Waypoints updated successfull" %
+        rospy.loginfo("[MAVROS:%s] Waypoints updated successfully" %
                       self.uav_name)
         return SUCCESS_ERR
 
@@ -723,7 +858,7 @@ class MavRosProxy:
         #**********************************************************************
         #   Clear our own internal list of waypoints
         #**********************************************************************
-        rospy.logerr("[MAVROS:%s]Clearing waypoints on MAV" % self.uav_name)
+        rospy.loginfo("[MAVROS:%s]Clearing waypoints on MAV" % self.uav_name)
         self.current_waypoints = []
         self.waypoints_synced_with_mav = []
            
@@ -1013,12 +1148,23 @@ class MavRosProxy:
         #**********************************************************************
         self.current_waypoints = req.waypoints
         self.waypoints_synced_with_mav = [False] * len(req.waypoints)
+
+        #**********************************************************************
+        #   If there are no waypoints, we've already cleared them, so
+        #   we're done.
+        #   Note: If we don't stop here, drone quite happily requests
+        #   waypoint 0, even though we don't have one!
+        #**********************************************************************
+        if 0==len(req.waypoints):
+            rospy.loginfo("Waypoint list is now empty.")
+            return SUCCESS_ERR
         
         #**********************************************************************
         # Tell MAV how many waypoints we're about to send, and wait for it
         # to start requesting all waypoints
         #**********************************************************************
         start_time = rospy.Time.now()  # to be safe set before count_send
+        rospy.logdebug("sending waypoint count: %d" % len(req.waypoints))
         self.connection.waypoint_count_send(len(req.waypoints))
         while not all(self.waypoints_synced_with_mav):
             rospy.sleep(BUSY_WAIT_INTERVAL)
@@ -1028,10 +1174,13 @@ class MavRosProxy:
                 return MAV_TIMEOUT_ERR
 
         #**********************************************************************
-        #   Wait for MAV to acknowledge receipt of all waypoints
+        #   Wait for MAV to acknowledge receipt of all waypoints, before
+        #   updating count of waypoints on MAV
         #**********************************************************************
         status = self.wait_for_wp_ack(start_time)
-        if SUCCESS_ERR != status:
+        if SUCCESS_ERR == status:
+            self.state.num_of_waypoints = len(self.current_waypoints)
+        else:
             rospy.logerr("[MAVROS:%s] Failed to successfully send waypoints" %
                           self.uav_name)
             return status
@@ -1089,7 +1238,7 @@ class MavRosProxy:
         #**********************************************************************
         if len(self.current_waypoints) <= msg.seq:
             rospy.logwarn("[MAVROS:%s] Ignoring request for waypoint with "
-                          "out of range sequence number" % self.uav_name)
+                "out of range sequence number %d" % (self.uav_name, msg.seq) )
             return
 
         #**********************************************************************
@@ -1099,10 +1248,10 @@ class MavRosProxy:
         #   In future, we might want to make these attributes of the
         #   mavros/Waypoint.msg, so we can set them dynamically
         #**********************************************************************
+        waypoint = self.current_waypoints[msg.seq]
         autocontinue_flag = 0
         if waypoint.autocontinue:
             autocontinue_flag = 1
-        waypoint = self.current_waypoints[msg.seq]
         waitTime_in_ms = waypoint.waitTime.to_sec() * 1000;
         self.connection.mav.mission_item_send(
                 self.connection.target_system,      # target system for wp
