@@ -141,7 +141,7 @@ DIAG_OK    = diagnostic_msgs.msg.DiagnosticStatus.OK
 #   Constants for controlling diagnostics
 #******************************************************************************
 DIAG_UPDATE_FREQ = rospy.Duration(secs=0.2) # how often to update diagnostics
-LOW_BATTERY_THRESHOLD = 10 # warn if battery level remaining is below this
+LOW_BATTERY_THRESHOLD = 20 # warn if battery level remaining is below this
 MAX_HEARTBEAT_INTERVAL = rospy.Duration(secs=3.0) # max time between heartbeats
 
 #******************************************************************************
@@ -223,7 +223,8 @@ class MavRosProxy:
         #**********************************************************************
         self.diag_updater = diagnostic_updater.Updater()
         self.diag_updater.setHardwareID("%s-mavros-driver" % self.uav_name)
-        self.diag_updater.add("diagnostics",self.produce_diagnostics)
+        self.diag_updater.add("driver",self.general_diagnostics_cb)
+        self.diag_updater.add("battery",self.battery_diagnostics_cb)
 
         #**********************************************************************
         # Register ROS Publications
@@ -258,7 +259,28 @@ class MavRosProxy:
 
         self.diag_updater.update()
 
-    def produce_diagnostics(self, status):
+    def battery_diagnostics_cb(self, status):
+        """Callback for filling in ROS diagnostic messsages about battery"""
+
+        #**********************************************************************
+        #   Record battery precentage in message summary, with warning if
+        #   too low.
+        #**********************************************************************
+        if LOW_BATTERY_THRESHOLD > self.status_msg.battery_remaining:
+            status.summary(DIAG_WARN, "%d%% - Low!!" %
+                    self.status_msg.battery_remaining)
+        else:
+            status.summary(DIAG_OK, "%d%% - OK" %
+                    self.status_msg.battery_remaining)
+
+        #**********************************************************************
+        #   Fill in the details - voltage, current etc
+        #**********************************************************************
+        status.add("Battery voltage", self.status_msg.battery_voltage)
+        status.add("Battery current", self.status_msg.battery_current)
+        status.add("Battery remaining", self.status_msg.battery_remaining) 
+
+    def general_diagnostics_cb(self, status):
         """Callback for filling in ROS diagnostic messages
 
            Parameters
@@ -280,16 +302,13 @@ class MavRosProxy:
         elif len(self.current_waypoints) != self.state.num_of_waypoints:
             status.summary(DIAG_ERROR, "Waypoint count out of sync with MAV.")
 
-        elif LOW_BATTERY_THRESHOLD > self.status_msg.battery_remaining:
-            status.summary(DIAG_WARN, "Low battery!!")
-
         elif rospy.Time.now() - self.state.header.stamp > \
             MAX_HEARTBEAT_INTERVAL:
 
             status.summary(DIAG_STALE, "Connection with MAV gone stale")
 
         else:
-            status.summary(DIAG_OK, "Driver status OK")
+            status.summary(DIAG_OK, "status OK")
 
         #**********************************************************************
         #   Report useful state variables
@@ -302,9 +321,6 @@ class MavRosProxy:
         status.add("base mode", self.state.base_mode)
         status.add("custom mode", self.state.custom_mode)
         status.add("MAV system status", self.state.system_status)
-        status.add("Battery voltage", self.status_msg.battery_voltage)
-        status.add("Battery current", self.status_msg.battery_current)
-        status.add("Battery remaining", self.status_msg.battery_remaining) 
 
         return status
 
