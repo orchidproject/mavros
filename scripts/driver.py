@@ -223,8 +223,9 @@ class MavRosProxy:
         #**********************************************************************
         self.diag_updater = diagnostic_updater.Updater()
         self.diag_updater.setHardwareID("%s-mavros-driver" % self.uav_name)
-        self.diag_updater.add("driver",self.general_diagnostics_cb)
+        self.diag_updater.add("state",self.state_diagnostics_cb)
         self.diag_updater.add("battery",self.battery_diagnostics_cb)
+        self.diag_updater.add("mission",self.mission_diagnostics_cb)
 
         #**********************************************************************
         # Register ROS Publications
@@ -280,7 +281,42 @@ class MavRosProxy:
         status.add("Battery current", self.status_msg.battery_current)
         status.add("Battery remaining", self.status_msg.battery_remaining) 
 
-    def general_diagnostics_cb(self, status):
+        return status
+
+    def mission_diagnostics_cb(self, status):
+        """Callback for producing ROS diagnostics about current mission"""
+
+        #**********************************************************************
+        #   Fill in message with values related to mission
+        #**********************************************************************
+        status.add("latitude", self.filtered_pos_msg.latitude)
+        status.add("longitude", self.filtered_pos_msg.longitude)
+        status.add("altitude", self.filtered_pos_msg.relative_altitude)
+        status.add("mission count", self.state.num_of_waypoints)
+        status.add("mission", self.state.current_waypoint)
+
+        #**********************************************************************
+        #   Give errors if mission is out of sync with drone
+        #**********************************************************************
+        if len(self.current_waypoints) != len(self.waypoints_synced_with_mav):
+            status.summary(DIAG_ERROR, "Inconsistent internal waypoint count.")
+
+        elif len(self.current_waypoints) != self.state.num_of_waypoints:
+            status.summary(DIAG_ERROR, "Waypoint count out of sync with MAV.")
+
+        elif not all(self.waypoints_synced_with_mav):
+            status.summary(DIAG_WARN, "Waypoints out of sync with MAV.")
+
+        #**********************************************************************
+        #   Otherwise, put current mission in summary
+        #**********************************************************************
+        else:
+            status.summary(DIAG_OK, "current waypoint: %d" %
+                    self.state.current_waypoint)
+
+        return status
+
+    def state_diagnostics_cb(self, status):
         """Callback for filling in ROS diagnostic messages
 
            Parameters
@@ -293,34 +329,24 @@ class MavRosProxy:
         #**********************************************************************
         #   Decide what error status to return and fill in summary
         #**********************************************************************
-        if len(self.current_waypoints) != len(self.waypoints_synced_with_mav):
-            status.summary(DIAG_ERROR, "Inconsistent internal waypoint count.")
-
-        elif self.connection is None:
+        time_since_last_heartbeat = rospy.Time.now() - self.state.header.stamp
+        if self.connection is None:
             status.summary(DIAG_WARN, "No connection yet with MAV.")
 
-        elif len(self.current_waypoints) != self.state.num_of_waypoints:
-            status.summary(DIAG_ERROR, "Waypoint count out of sync with MAV.")
-
-        elif rospy.Time.now() - self.state.header.stamp > \
-            MAX_HEARTBEAT_INTERVAL:
-
+        elif time_since_last_heartbeat > MAX_HEARTBEAT_INTERVAL:
             status.summary(DIAG_STALE, "Connection with MAV gone stale")
 
         else:
-            status.summary(DIAG_OK, "status OK")
+            status.summary(DIAG_OK, "OK")
 
         #**********************************************************************
         #   Report useful state variables
         #**********************************************************************
-        status.add("latitude", self.filtered_pos_msg.latitude)
-        status.add("longitude", self.filtered_pos_msg.longitude)
-        status.add("altitude", self.filtered_pos_msg.relative_altitude)
-        status.add("mission count", self.state.num_of_waypoints)
-        status.add("mission", self.state.current_waypoint)
         status.add("base mode", self.state.base_mode)
         status.add("custom mode", self.state.custom_mode)
         status.add("MAV system status", self.state.system_status)
+        status.add("last heartbeat: ", "%.2f" % 
+                time_since_last_heartbeat.to_sec())
 
         return status
 
