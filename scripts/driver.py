@@ -1513,7 +1513,7 @@ if __name__ == '__main__':
             else:
                 opts.device = None
         if opts.device:
-            rospy.init_node("mavros")
+            rospy.init_node("mavros_driver")
             mav_proxy = MavRosProxy(opts.name, opts.device, opts.baudrate, opts.source_system, opts.command_timeout,
                         opts.minimum_altitude, opts.maximum_altitude)
             mav_proxy.start()
