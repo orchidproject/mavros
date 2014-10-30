@@ -95,7 +95,7 @@ from mavutil import mavlink as mav
 from mavutil import mavlink_connection as mav_connect
 from mavutil import all_printable as print_msg
 from modes import *
-import tools
+from tools import *
 
 #******************************************************************************
 # Constants used in calculation of position covariance
@@ -151,32 +151,6 @@ MAX_HEARTBEAT_INTERVAL = rospy.Duration(secs=3.0) # max time between heartbeats
 #******************************************************************************
 MAV_OK_STATUS  = 0
 MAV_ERR_STATUS = 1
-
-#******************************************************************************
-#   Convenience Error definitions for returning results from callbacks
-#******************************************************************************
-SUCCESS_ERR                  = Error(code=Error.SUCCESS)
-FAILURE_ERR                  = Error(code=Error.FAILURE)
-UNSUPPORTED_MODE_ERR         = Error(code=Error.UNSUPPORTED_MODE)
-UNSUPPORTED_FRAME_ERR        = Error(code=Error.UNSUPPORTED_FRAME)
-COORDS_OUT_OF_RANGE_ERR      = Error(code=Error.COORDS_OUT_OF_RANGE)
-MAV_TIMEOUT_ERR              = Error(code=Error.MAV_TIMEOUT)
-PARAM_NOT_SET_ERR            = Error(code=Error.PARAM_NOT_SET)
-BAD_PARAM_VALUE_ERR          = Error(code=Error.BAD_PARAM_VALUE)
-KEY_VALUE_COUNT_MISMATCH_ERR = Error(code=Error.KEY_VALUE_COUNT_MISMATCH)
-MAV_COMMAND_ERROR_ERR        = Error(code=Error.MAV_COMMAND_ERROR)
-UNSUPPORTED_COMMAND_ERR      = Error(code=Error.UNSUPPORTED_COMMAND)
-UNDEFINED_COMMAND_ERR        = Error(code=Error.UNDEFINED_COMMAND)
-INTERNAL_ERR                 = Error(code=Error.INTERNAL)
-UNDEFINED_WAYPOINT_ERR       = Error(code=Error.UNDEFINED_WAYPOINT)
-
-class GlobalWaypoint:
-    """Utility class for representing waypoints in global frame"""
-
-    def __init__(self,lat=None,lon=None,alt=None):
-        latitude = lat
-        longitude = lon
-        altitude = alt
 
 class MavRosProxy:
     def __init__(self, name, device, baudrate, source_system=255,
@@ -247,7 +221,7 @@ class MavRosProxy:
                                        queue_size=10)
 
         self.pub_state = rospy.Publisher(self.uav_name + '/state',
-                                         mavros.msg.State, queue_size=10)
+                                         mavros.msg.State, ueue_size=10)
 
         self.pub_attitude = rospy.Publisher(self.uav_name + '/attitude',
                                             mavros.msg.Attitude, queue_size=10)
@@ -462,7 +436,7 @@ class MavRosProxy:
         #   between the current and target positions
         #**********************************************************************
         current = self.filtered_pos_msg
-        horz_dist = tools.distance_along_ground(current,target)
+        horz_dist = distance_along_ground(current,target)
 
         #**********************************************************************
         #   Calculate vertical distance to travel in metres (up)
