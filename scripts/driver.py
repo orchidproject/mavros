@@ -71,7 +71,7 @@
 #******************************************************************************
 import sys, os, math, tf
 from socket import error
-from math import radians, cos, sin, asin, sqrt
+from math import sqrt
 
 #******************************************************************************
 # ROS Imports
@@ -95,11 +95,7 @@ from mavutil import mavlink as mav
 from mavutil import mavlink_connection as mav_connect
 from mavutil import all_printable as print_msg
 from modes import *
-
-#******************************************************************************
-# Used for estimating distances between GPS waypoints
-#******************************************************************************
-RADIUS_OF_EARTH_IN_METRES = 6367 * 1000.0
+import tools
 
 #******************************************************************************
 # Constants used in calculation of position covariance
@@ -463,20 +459,10 @@ class MavRosProxy:
 
         #**********************************************************************
         #   Estimate the distance to travel along the ground (in metres)
-        #   using the Haversine formula
+        #   between the current and target positions
         #**********************************************************************
         current = self.filtered_pos_msg
-        lat1 = math.radians(current.latitude)
-        lon1 = math.radians(current.longitude)
-        lat2 = math.radians(target.latitude)
-        lon2 = math.radians(target.longitude)
-
-        dlon = lon2 - lon1 
-        dlat = lat2 - lat1 
-        a = sin(dlat/2)**2 + cos(lat1) * cos(lat2) * sin(dlon/2)**2
-        c = 2 * asin(sqrt(a)) 
-
-        horz_dist = RADIUS_OF_EARTH_IN_METRES * c
+        horz_dist = tools.distance_along_ground(current,target)
 
         #**********************************************************************
         #   Calculate vertical distance to travel in metres (up)
