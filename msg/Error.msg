@@ -18,3 +18,4 @@ uint8 UNSUPPORTED_COMMAND = 10 # attempt to execute unsupported command
 uint8 UNDEFINED_COMMAND = 11   # attempt to execute undefined command
 uint8 INTERNAL = 12            # Internal error (indicates a runtime bug)
 uint8 UNDEFINED_WAYPOINT = 13  # Attempt to set mission to undefined waypoint
+uint8 WAYPOINT_VERIFICATION_FAILURE = 14  # Failed to verify waypoints on drone
