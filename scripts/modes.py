@@ -1,5 +1,3 @@
-#!/usr/bin/env python
-
 # CUSTOM_MODES contains for all vehicles the corresponding numbers for that
 # vehicle specific custom modes as required by MAVLink
 # If you require add ones for your own type of commands

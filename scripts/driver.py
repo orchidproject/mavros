@@ -94,7 +94,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(os.path.realpath(__file__)),
 from mavutil import mavlink as mav
 from mavutil import mavlink_connection as mav_connect
 from mavutil import all_printable as print_msg
-from tools import *
+from modes import *
 
 #******************************************************************************
 # Used for estimating distances between GPS waypoints
