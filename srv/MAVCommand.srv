@@ -1,6 +1,7 @@
 uint8 command
 uint8 custom
 
+# recognised command ids
 uint8 CMD_COMMAND = 0
 uint8 CMD_TAKEOFF = 1
 uint8 CMD_LAND = 2
@@ -11,5 +12,9 @@ uint8 CMD_BASE_MODE = 10
 uint8 CMD_CUSTOM_MODE = 11
 uint8 CMD_HALT = 20
 uint8 CMD_RESUME = 21
+
+# known custom ids
+uint8 CUSTOM_NO_OP = 0  # has no effect
+uint8 CUSTOM_ARDONE_EMERGENCY = 100  # emergency mode recognised by Parrot
 ---
 Error status
