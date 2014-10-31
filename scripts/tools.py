@@ -2,6 +2,7 @@
 """
 from utm import from_latlon, to_latlon
 import mavros.msg as msg
+import diagnostics_msgs
 from mavros.msg import Error
 from math import radians, cos, sin, asin, sqrt
 
@@ -9,6 +10,23 @@ from math import radians, cos, sin, asin, sqrt
 # Used for estimating distances between GPS waypoints
 #******************************************************************************
 RADIUS_OF_EARTH_IN_METRES = 6367 * 1000.0
+
+#******************************************************************************
+#   Range for valid WGS84 Coordinates
+#******************************************************************************
+MIN_VALID_LATITUDE  = -90.0
+MAX_VALID_LATITUDE  = +90.0
+MIN_VALID_LONGITUDE = -180.0
+MAX_VALID_LONGITUDE = +180.0
+
+#******************************************************************************
+#   ROS Diagnostic error levels
+#******************************************************************************
+DIAG_UPDATE_FREQ = rospy.Duration(secs=0.2) # how often to update diagnostics
+DIAG_STALE = diagnostic_msgs.msg.DiagnosticStatus.STALE
+DIAG_ERROR = diagnostic_msgs.msg.DiagnosticStatus.ERROR
+DIAG_WARN  = diagnostic_msgs.msg.DiagnosticStatus.WARN
+DIAG_OK    = diagnostic_msgs.msg.DiagnosticStatus.OK
 
 #******************************************************************************
 #   Convenience Error definitions for returning results from callbacks
@@ -123,6 +141,11 @@ class UTMWaypoint:
         wp.radius = 0.0
         wp.waitTime = 0.0
         return wp
+
+    def to_global_waypoint(self):
+        """Converts this UTM waypoint to a Global waypoint"""
+        wp = self.to_waypoint_message()
+        return GlobalWaypoint.from_waypoint_message(wp)
 
 
 class GlobalWaypoint:

@@ -124,25 +124,8 @@ ADHOC_MANUAL = 99
 BUSY_WAIT_INTERVAL = 0.1
 
 #******************************************************************************
-#   Range for valid WGS84 Coordinates
-#******************************************************************************
-MIN_VALID_LATITUDE  = -90.0
-MAX_VALID_LATITUDE  = +90.0
-MIN_VALID_LONGITUDE = -180.0
-MAX_VALID_LONGITUDE = +180.0
-
-#******************************************************************************
-#   ROS Diagnostic error levels
-#******************************************************************************
-DIAG_STALE = diagnostic_msgs.msg.DiagnosticStatus.STALE
-DIAG_ERROR = diagnostic_msgs.msg.DiagnosticStatus.ERROR
-DIAG_WARN  = diagnostic_msgs.msg.DiagnosticStatus.WARN
-DIAG_OK    = diagnostic_msgs.msg.DiagnosticStatus.OK
-
-#******************************************************************************
 #   Constants for controlling diagnostics
 #******************************************************************************
-DIAG_UPDATE_FREQ = rospy.Duration(secs=0.2) # how often to update diagnostics
 LOW_BATTERY_THRESHOLD = 20 # warn if battery level remaining is below this
 MAX_HEARTBEAT_INTERVAL = rospy.Duration(secs=3.0) # max time between heartbeats
 
@@ -208,7 +191,7 @@ class MavRosProxy:
         #   ROS Diagnostics Updater
         #**********************************************************************
         self.diag_updater = diagnostic_updater.Updater()
-        self.diag_updater.setHardwareID("%s-mavros-driver" % self.uav_name)
+        self.diag_updater.setHardwareID("%s" % self.uav_name)
         self.diag_updater.add("state",self.state_diagnostics_cb)
         self.diag_updater.add("gps",self.gps_diagnostics_cb)
         self.diag_updater.add("battery",self.battery_diagnostics_cb)
