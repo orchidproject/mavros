@@ -1,5 +1,6 @@
 """Utility functions used by package python scripts
 """
+from utm import from_latlon, to_latlon
 import mavros.msg as msg
 from mavros.msg import Error
 from math import radians, cos, sin, asin, sqrt
@@ -28,10 +29,102 @@ INTERNAL_ERR                 = Error(code=Error.INTERNAL)
 UNDEFINED_WAYPOINT_ERR       = Error(code=Error.UNDEFINED_WAYPOINT)
 WAYPOINT_VERIFICATION_FAILURE_ERR = \
     Error(code=Error.WAYPOINT_VERIFICATION_FAILURE)
+NO_GPS_FIX_ERR               = Error(code.Error.NO_GPS_FIX)
 
 #******************************************************************************
 #   Utility classes
 #******************************************************************************
+class UTMWaypoint:
+    """Utility class used to represent UTM coordinates"""
+
+    def __init__(self, easting=0.0, northing=0.0, altitude=0.0
+        zone_number=None, zone_letter=None):
+    """Constructs new instance with specified parameters
+
+       Parameters
+          easting - easting in metres from UTM zone origin [default: 0.0]
+          northing - northing in metres from UTM zone origin [default: 0.0]
+          zone_number - UTM zone number [default: None]
+          zone_letter - UTM zone letter [default: None]
+    """
+    self.easting = easting
+    self.northing = northing
+    self.zone_number = zone_number
+    self.zone_letter = zone_letter
+
+    def from_waypoint_message(cls,msg):
+        """Constructs a new UTMWaypoint from a waypoint message
+
+           Parameters
+           msg - waypoint in global frame
+
+           Returns
+           - A new UTMWaypoint with coordinates converted from msg
+           - None if msg is not in the global coordinate frame
+        """
+
+        #**********************************************************************
+        #   Don't accept waypoint if its not global.
+        #   Return None to indicate failure
+        #**********************************************************************
+        if msg.Waypoint.FRAME_GLOBAL != msg.frame:
+            return None
+
+        #**********************************************************************
+        #   Otherwise return a new representation, using mapping defined
+        #   in mavros/Waypoint.msg
+        #**********************************************************************
+        (east, north, z_num, z_let) = from_latlon(msg.x,msg.y)       
+        result = cls()  # a new UTMWaypoint instance
+        result.easting = east
+        result.northing = north
+        result.altitude = 0.0
+        result.zone_number = z_num
+        result.zone_letter = z_let
+        return result
+
+    def to_waypoint_message(self):
+        """Returns this UTMWaypoint as a waypoint message in the global frame
+
+           Returns Waypoint message object specified in global frame.
+
+           Only the x,y,z and frame attributes will be filled in.
+           It is the caller's responsiblity to set all other attributes
+           if required.
+        """
+
+        #**********************************************************************
+        #   Convert this UTM position to global coordinates
+        #**********************************************************************
+        altitude = self.altitude  # altitude requires no conversion
+        (latitude, longitude) = to_latlon(
+                self.easting
+                self.northing
+                self.zone_number
+                self.zone_letter
+                )
+
+        #**********************************************************************
+        #   Fill in frame and position
+        #**********************************************************************
+        wp = msg.Waypoint()
+        wp.frame = msg.Waypoint.FRAME_GLOBAL
+        wp.x = latitude
+        wp.y = longitude
+        wp.z = altitude
+
+        #**********************************************************************
+        #   Set other attributes to safe defaults. Worst case, if this
+        #   waypoint was used unchanged to control drone, you'd expected to
+        #   wait at this waypoint forever (because its effectively unreachable
+        #   within 0 radius.
+        #**********************************************************************
+        wp.autocontinue = False
+        wp.radius = 0.0
+        wp.waitTime = 0.0
+        return wp
+
+
 class GlobalWaypoint:
     """Utility class for representing waypoints in global frame"""
     def __init__(self,lat=None,lon=None,alt=None):
@@ -66,7 +159,35 @@ class GlobalWaypoint:
         #**********************************************************************
         return cls(lat=msg.x, lon=msg.y, alt=msg.z)
 
+    def to_waypoint_message(self):
+        """Converts this waypoint into a mavros/Waypoint message
 
+           Returns Waypoint message object specified in global frame.
+
+           Only the x,y,z and frame attributes will be filled in.
+           It is the caller's responsiblity to set all other attributes
+           if required.
+        """
+
+        #**********************************************************************
+        #   Fill in frame and position
+        #**********************************************************************
+        wp = msg.Waypoint()
+        wp.frame = msg.Waypoint.FRAME_GLOBAL
+        wp.x = self.latitude
+        wp.y = self.longitude
+        wp.z = self.altitude
+
+        #**********************************************************************
+        #   Set other attributes to safe defaults. Worst case, if this
+        #   waypoint was used unchanged to control drone, you'd expected to
+        #   wait at this waypoint forever (because its effectively unreachable
+        #   within 0 radius.
+        #**********************************************************************
+        wp.autocontinue = False
+        wp.radius = 0.0
+        wp.waitTime = 0.0
+        return wp
 
 #******************************************************************************
 #   Module functions

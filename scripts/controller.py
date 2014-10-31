@@ -39,6 +39,9 @@
     /uav_name/control/manual_control - when in manual mode, listens for velocity
         messages to control UAV directly
 
+    /uav_name/state - state information published by driver about drone
+    /uav_name/filtered_pos - current GPS position published by driver
+
     The following are used to issue commands to all UAVs at once, but
     not response or acknowledgement is given in response.
     /all/control/takeoff - tell all UAVs to take off
@@ -63,6 +66,11 @@ from std_msgs.msg import Empty as EmptyMsg
 
 # prefix for things subscribed to by all UAV controllers
 MULTI_UAV_CONTROL_PREFIX = "/all/control/"
+
+# Time To Live before current position goes stale.
+# If we current position isn't updated within this time, we don't trust it
+# any longer.
+CURRENT_POSITION_TTL = rospy.Duration(secs=1.0)
 
 #*******************************************************************************
 #   Classes
@@ -102,6 +110,20 @@ class Controller:
 
         # drone's current target waypoint
         self.current_waypoint = 0
+
+        # Drone's current position as a tools.GlobalWaypoint object
+        # Undefined if we haven't heard its position for more than
+        # CURRENT_POSITION_TTL
+        self.current_position = None
+
+        # time current position with last updated
+        self.current_position_timestamp = rospy.Time.now()
+
+        # origin used to define local cartesian coordinates
+        # specified as a tools.UTMWaypoint, and is basically used to replace 
+        # the usual origin of the local UTM zone. Undefined until explicitly
+        # set by message received on set_origin topic
+        self.origin = None
 
     def __logerr(self,msg):
         """Used for logging error messages
@@ -184,8 +206,17 @@ class Controller:
            Returns the equivalent waypoint in the global frame (i.e. no change
                if already in the correct frame)
 
-           Returns None if waypoint is not in recognised frame.
+           Returns None if waypoint is not in recognised frame, or if local
+           origin is not set.
         """
+
+        #**********************************************************************
+        #   If the local origin isn't set, we won't be able to do any
+        #   conversion. Give a warning at this point, but then try our best
+        #**********************************************************************
+        if self.origin is None:
+            self.__logwarn("Local origin isn't set. We won't be able to"
+                    " to convert local coordinates if there are any.")
 
         #**********************************************************************
         #   If waypoint is already in global frame, then we're done
@@ -202,16 +233,22 @@ class Controller:
         #**********************************************************************
         elif msg.Waypoint.FRAME_LOCAL == wp.frame:
 
+            # abort if the local origin isn't set
+            if self.origin is None:
+                self.__logerr("Trying to convert local waypoint without "
+                        " defined origin. Operation aborted.")
+                return None
+
             # deep copy waypoint so we don't change original
             result = deepcopy(wp)
 
             # convert to UTM coordinates offset by our local origin
-            utm_eastings = wp.x + self.origin.x
-            utm_northings = wp.y + self.origin.y
+            utm_easting = wp.x + self.origin.easting
+            utm_northing = wp.y + self.origin.northing
 
             # put latitude and longitude in result
-            result.x, result.y = to_latlon(utm_eastings, utm_northings,
-                    self.origin.zone_n, self.origin.zone_l)
+            result.x, result.y = to_latlon(utm_easting, utm_northing,
+                    self.origin.zone_num, self.origin.zone_letter)
 
             # set coordinate frame to GLOBAL in the result
             result.frame = msg.Waypoint.FRAME_GLOBAL
@@ -347,7 +384,7 @@ class Controller:
         #   Make sure we're in AUTO mode
         #**********************************************************************
         if self.uav_mode != srv.SetMode.AUTO:
-            self.__logerr("Can't halt drone unless we know its in AUTO mode."
+            self.__logwarn("Can't halt drone unless we know its in AUTO mode."
                     " Please set mode explicitly first.")
             return UNSUPPORTED_COMMAND
 
@@ -365,105 +402,130 @@ class Controller:
     def __ros_init(self):
         """Initialises ROS services, publications and subscriptions"""
 
-    #***************************************************************************
-    #   Initialise proxy functions for remote services we call.
-    #   These are all provided by the mavros driver node 
-    #***************************************************************************
-    self.mav_command_srv = rospy.ServiceProxy(self.driver_prefix +
+        #**********************************************************************
+        #   Initialise proxy functions for remote services we call.
+        #   These are all provided by the mavros driver node 
+        #**********************************************************************
+        self.mav_command_srv = rospy.ServiceProxy(self.driver_prefix +
             "mav_command", srv.MAVCommand)
 
-    self.set_waypoints_srv = rospy.ServiceProxy(self.driver_prefix +
+        self.set_waypoints_srv = rospy.ServiceProxy(self.driver_prefix +
             "set_waypoints", srv.SetWaypoints)
 
-    self.get_waypoints_srv = rospy.ServiceProxy(self.driver_prefix +
+        self.get_waypoints_srv = rospy.ServiceProxy(self.driver_prefix +
             "get_waypoints", srv.GetWaypoints)
 
-    self.set_params_srv = rospy.ServiceProxy(self.driver_prefix +
+        self.set_params_srv = rospy.ServiceProxy(self.driver_prefix +
             "set_params", srv.SetParameters)
 
-    self.get_params_srv = rospy.ServiceProxy(self.driver_prefix +
+        self.get_params_srv = rospy.ServiceProxy(self.driver_prefix +
             "get_params", srv.GetParameters)
 
-    self.set_mission_srv = rospy.ServiceProxy(self.driver_prefix +
+        self.set_mission_srv = rospy.ServiceProxy(self.driver_prefix +
             "set_mission", srv.SetMission)
 
-    #***************************************************************************
-    #   Initialise ROS services we provide
-    #***************************************************************************
-    rospy.Service(self.control_prefix + "set_mode", srv.SetMode,
+        #**********************************************************************
+        #   Initialise ROS services we provide
+        #**********************************************************************
+        rospy.Service(self.control_prefix + "set_mode", srv.SetMode,
             self.set_mode_cb)
 
-    rospy.Service(self.control_prefix + "set_origin_here", srv.SimpleCommand,
-            self.set_origin_here_cb)
+        rospy.Service(self.control_prefix + "set_origin_here",
+            srv.SimpleCommand, self.set_origin_here_cb)
 
-    rospy.Service(self.control_prefix + "clear_queue", srv.SimpleCommand,
+        rospy.Service(self.control_prefix + "clear_queue", srv.SimpleCommand,
             self.clear_queue_cb)
 
-    rospy.Service(self.control_prefix + "pause_queue", srv.SimpleCommand,
+        rospy.Service(self.control_prefix + "pause_queue", srv.SimpleCommand,
             self.pause_queue_cb)
 
-    rospy.Service(self.control_prefix + "resume_queue", srv.SimpleCommand,
+        rospy.Service(self.control_prefix + "resume_queue", srv.SimpleCommand,
             self.resume_queue_cb)
 
-    rospy.Service(self.control_prefix + "land", srv.SimpleCommand,
+        rospy.Service(self.control_prefix + "land", srv.SimpleCommand,
             self.land_cb)
 
-    rospy.Service(self.control_prefix + "takeoff", srv.SimpleCommand,
+        rospy.Service(self.control_prefix + "takeoff", srv.SimpleCommand,
             self.takeoff_cb)
 
-    rospy.Service(self.control_prefix + "add_waypoints", srv.AddWaypoints,
+        rospy.Service(self.control_prefix + "add_waypoints", srv.AddWaypoints,
             self.add_waypoints_cb)
 
-    rospy.Service(self.control_prefix + "add_sweep", srv.AddSweep,
+        rospy.Service(self.control_prefix + "add_sweep", srv.AddSweep,
             self.add_sweep_cb)
 
-    rospy.Service(self.control_prefix + "add_spiral_out", srv.AddSpiral,
+        rospy.Service(self.control_prefix + "add_spiral_out", srv.AddSpiral,
             self.add_spiral_out_cb)
 
-    rospy.Service(self.control_prefix + "add_spiral_in", srv.AddSpiral,
+        rospy.Service(self.control_prefix + "add_spiral_in", srv.AddSpiral,
             self.add_spiral_in_cb)
 
-    #***************************************************************************
-    #   Register call back functions to for topics we subscribe to
-    #***************************************************************************
-    rospy.Subscriber(self.control_prefix + "manual_control", msg.Velocity,
-        self.manual_control_cb)
+        #**********************************************************************
+        #   Register call back functions to for topics we subscribe to
+        #**********************************************************************
+        rospy.Subscriber(self.control_prefix + "manual_control", msg.Velocity,
+            self.manual_control_cb)
 
-    rospy.Subscriber(MULTI_UAV_CONTROL_PREFIX + "takeoff", std_msgs.Empty,
+        rospy.Subscriber(MULTI_UAV_CONTROL_PREFIX + "takeoff", std_msgs.Empty,
             self.takeoff_cb)
 
-    rospy.Subscriber(MULTI_UAV_CONTROL_PREFIX + "land", std_msgs.Empty,
+        rospy.Subscriber(MULTI_UAV_CONTROL_PREFIX + "land", std_msgs.Empty,
             self.land_cb)
 
-    rospy.Subscriber(MULTI_UAV_CONTROL_PREFIX + "emergency", std_msgs.Empty,
-            self.emergency_cb)
+        rospy.Subscriber(MULTI_UAV_CONTROL_PREFIX + "emergency",
+            std_msgs.Empty, self.emergency_cb)
 
-    rospy.Subscriber(MULTI_UAV_CONTROL_PREFIX + "set_origin", msg.Waypoint,
+        rospy.Subscriber(MULTI_UAV_CONTROL_PREFIX + "set_origin", msg.Waypoint,
             self.set_origin_cb)
 
-    rospy.Subscriber(self.driver_prefix + "state", msg.State, 
+        rospy.Subscriber(self.driver_prefix + "state", msg.State, 
             self.driver_state_cb)
 
-    #***************************************************************************
-    #   Advertise messages that we publish
-    #***************************************************************************
-    # None right now -- apart from diagnostics
-    # In future, might want to publish something about the state of the queue?
+        rospy.Subscriber(self.driver_prefix + "filtered_pos",
+            msg.FilteredPosition, self.filtered_position_cb)
+
+        #**********************************************************************
+        #   Advertise messages that we publish
+        #**********************************************************************
+        self.pub_origin = rospy.Publisher(MULTI_UAV_CONTROL_PREFIX + \
+            "set_origin", msg.Waypoint, queue_size=1)
+
+    def filtered_position_cb(self,msg):
+        """Callback for drone's filtered position, received from driver"""
+
+        #**********************************************************************
+        #   Use value to update our copy of the current position
+        #**********************************************************************
+        if self.current_position is None:
+            self.current_position = GlobalWaypoint()
+
+        self.current_position.latitude = msg.latitude
+        self.current_position.longitude = msg.longitude
+        self.current_position.altitude = msg.relative_altitude
+
+        #**********************************************************************
+        #   Also update the timestamp, so we know if the value has gone stale.
+        #**********************************************************************
+        self.current_position_timestamp = msg.header.stamp
 
     def driver_state_cb(self,msg):
         """Callback for driver state messages
 
-           Used to figure out when waypoints have been completed
+           Used to figure out when waypoints have been completed. Ideally this
+           would actually be achieved used mavlink MISSION_REACHED messages,
+           but its not clear if the AR.Drone actually sends these.
         """
 
         #***********************************************************************
         #   Calculate number of waypoints completed since last state message
         #   received.
+        #   Note: important that we update our copy of the current
+        #   waypoint before exiting successfully from this function.
         #***********************************************************************
         newly_completed = msg.current_waypoint - self.current_waypoint
 
         #***********************************************************************
-        #   If no new waypoints have been completed, then here is nothing
+        #   If no new waypoints have been completed, then there is nothing
         #   to update or do
         #***********************************************************************
         if 0 == newly_completed:
@@ -486,7 +548,7 @@ class Controller:
             return
 
         #***********************************************************************
-        #   If we've allegedly completed more waypoints that we have queued,
+        #   If we've allegedly completed more waypoints than we have queued,
         #   then something is probably wrong
         #***********************************************************************
         if self.queue.qsize() <= newly_completed:
@@ -503,7 +565,9 @@ class Controller:
         #***********************************************************************
         if self.queue_is_paused:
             self.__logerr("Drone appears to have completed %d waypoints, even"
-                    " though queue is paused.")
+                    " though queue is paused. Attempting to pause queue again")
+            self.pause_queue_cb()
+            return
 
         #***********************************************************************
         #   If we've completed more than one waypoint, that might be ok,
@@ -514,7 +578,8 @@ class Controller:
                     " miss something?" % newly_completed)
 
         #***********************************************************************
-        #   Remove completed waypoints from the queue
+        #   Remove completed waypoints from the queue, and update our copy of
+        #   the current target waypoint id
         #***********************************************************************
         self.current_waypoint = msg.current_waypoint
         del self.waypoint_queue[0:newly_completed] 
@@ -539,7 +604,7 @@ class Controller:
         #   If no change in mode is requested, then there is nothing to do
         #***********************************************************************
         if self.uav_mode == req.mode:
-            self.__logdebug("Requested mode is already set -- Nothing to do.")
+            self.__loginfo("Drone is already in requested mode: %d" % req.mode)
             return
 
         #***********************************************************************
@@ -597,11 +662,64 @@ class Controller:
            The origin for all UAVs will be set to the current location of this
            UAV.
         """
-        pass
+
+        #***********************************************************************
+        #   If our current position is unknown, or has gone stale,
+        #   then we can't set our position.
+        #***********************************************************************
+        pos = self.current_position # for convenience
+        pos_stamp = self.current_position_timestamp
+        if pos is None:
+            self.__logwarn("Ignoring request to set origin at current position"
+                    " because our position isn't currently known")
+            return NO_GPS_FIX_ERR
+
+        if rospy.Time.now()-pos_stamp > CURRENT_POSITION_TTL:
+            self.__logwarn("Ignoring request to set origin at current position"
+                    " because our last known position has gone stale.")
+            return NO_GPS_FIX_ERR
+
+        #**********************************************************************
+        #   If current position is exactly zero then we probably don't
+        #   have a GPS fix really - best abort
+        #**********************************************************************
+        if 0==pos.latitude and 0==pos.altitude and 0==pos.longitude:
+            self.__logwarn("Ignoring request to set origin. Current position "
+                    " is 0,0,0 - most likely because there is no GPS fix.")
+            return NO_GPS_FIX_ERR
+
+        #***********************************************************************
+        #   Publish current origin on shared /set_origin topic
+        #
+        #   This should not only set everyone else's origin, it should
+        #   also result in our own origin being set by invoking our own
+        #   callback on this topic.
+        #***********************************************************************
+        msg = pos.to_waypoint_message()
+        self.pub_origin(msg)
+        return SUCCESS_ERR
 
     def set_origin_cb(self,origin_wp):
         """Accepts a new origin for the local coordinate frame for this UAV"""
-        pass
+
+        #***********************************************************************
+        #   Ensure received waypoint is in global frame
+        #***********************************************************************
+        if msg.Waypoint.FRAME_GLOBAL != origin_wp.frame:
+            self.__logwarn("Ignoring received origin because its not in "
+                    "global frame.")
+            return UNSUPPORTED_FRAME_ERR
+
+        #***********************************************************************
+        #   Put in cartesian space by converting to local UTM point
+        #   Use this value to set the origin
+        #***********************************************************************
+        self.origin = UTMWaypoint.from_waypoint_message(origin_wp)
+        if self.origin is None:
+            self.__logerror("Internal error. Origin could not be set.")
+            return INTERNAL_ERR
+
+        return SUCCESS_ERR
 
     def clear_queue_cb(self,req=None):
         """Callback for clearing the queue
