@@ -265,6 +265,7 @@ class Controller:
 
     def __set_waypoints_from_queue(self):
         """Syncs the waypoints on the drone with the currently queued waypoints
+           and restarts execution if the queue is not currently paused.
         """
 
         #**********************************************************************
@@ -397,6 +398,8 @@ class Controller:
         response = self.mav_command_srv(request)
         if SUCCESS_ERR != response.status:
             self.__logerr("Could not halt drone")
+        else:
+            self.__loginf("Halted drone.")
         return response.status
 
     def __ros_init(self):
@@ -489,6 +492,63 @@ class Controller:
         #**********************************************************************
         self.pub_origin = rospy.Publisher(MULTI_UAV_CONTROL_PREFIX + \
             "set_origin", msg.Waypoint, queue_size=1)
+
+        #**********************************************************************
+        #   Setup ROS diagnostics updater
+        #**********************************************************************
+        self.diag_updater = diagnostic_updater.Updater()
+        self.diag_updater.setHardwareID("%s" % self.uav_name)
+        self.diag_updater.add("controller",self.produce_diagnostics)
+
+    def produce_diagnostics(self,status):
+        """Used to produce ROS diagnostics about current controller state"""
+
+        #**********************************************************************
+        #   Calculate diagnostics about origin and current position
+        #**********************************************************************
+        is_origin_set = not (self.origin is None)
+        is_pos_stale = rospy.Time.now()-self.current_position_timestamp > \
+                       CURRENT_POSITION_TTL
+        is_pos_set = not (self.current_position is None)
+
+        if not is_pos_set:
+            pos_status = "Not known"
+        elif is_pos_stale:
+            pos_status = "stale"
+        else:
+            pos_status = "Up to date"
+
+        #**********************************************************************
+        #   If possible, calculate distance from origin
+        #**********************************************************************
+        if is_pos_set and is_origin_set:
+            pos = self.current_position
+            origin = self.origin.to_global_waypoint()
+            distance_from_origin = total_distance(pos,origin)
+        else:
+            distance_from_origin = "UNKNOWN"
+
+        #**********************************************************************
+        #   Fill useful details
+        #**********************************************************************
+        status.add("Controller state", self.uav_mode)
+        status.add("Waypoint queue paused", self.queue_is_paused)
+        status.add("Waypoints queued", len(self.waypoint_queue) )
+        status.add("Current waypoint", self.current_waypoint)
+        status.add("Origin set", is_origin_set)
+        status.add("Position status", pos_status)
+        status.add("Distance from origin", distance_from_origin)
+
+        #**********************************************************************
+        #   Fill in summary and report error conditions
+        #**********************************************************************
+        status.summary(DIAG_OK, "TODO Need better summary")
+        return status
+
+    def update_diagnostics(self):
+        """Used to periodically update ROS diagnostics"""
+
+        self.diag_updater.update()
 
     def filtered_position_cb(self,msg):
         """Callback for drone's filtered position, received from driver"""
@@ -612,15 +672,7 @@ class Controller:
         #   mode).
         #***********************************************************************
         if req.mode == srv.SetMode.EMERGENCY:
-            request = srv.MAVCommandRequest()
-            request.mode = srv.MAVCommand.CMD_CUSTOM_MODE
-            request.custom = srv.MAVCommand.CUSTOM_ARDONE_EMERGENCY
-            response = self.mav_cmd(request)
-            if SUCCESS_ERR == response.status:
-                self.uav_mode == srv.SetMode.EMERGENCY
-            else:
-                self.__logerr("Drone failed to enter emergency mode")
-            return response.status
+            return self.emergency_cb()  # delegate to emergency callback
 
         #***********************************************************************
         #   Ask drone to enter MANUAL mode
@@ -629,9 +681,9 @@ class Controller:
             request = srv.MAVCommandRequest()
             request.mode = srv.MAVCommand.CMD_MANUAL
             request.custom = srv.MAVCommand.CUSTOM_NO_OP
-            response = self.mav_cmd(request)
+            response = self.mav_command_srv(request)
             if SUCCESS_ERR == response.status:
-                self.uav_mode == srv.SetMode.EMERGENCY
+                self.uav_mode == srv.SetMode.MANUAL
             else:
                 self.__logerr("Drone failed to enter manual mode")
             return response.status
@@ -643,9 +695,9 @@ class Controller:
             request = srv.MAVCommandRequest()
             request.mode = srv.MAVCommand.CMD_AUTO
             request.custom = srv.MAVCommand.CUSTOM_NO_OP
-            response = self.mav_cmd(request)
+            response = self.mav_command_srv(request)
             if SUCCESS_ERR == response.status:
-                self.uav_mode == srv.SetMode.EMERGENCY
+                self.uav_mode == srv.SetMode.AUTO
             else:
                 self.__logerr("Drone failed to enter auto mode")
             return response.status
@@ -741,15 +793,26 @@ class Controller:
            Returns
            mavros/Error message indicating success or failure
         """
-        pass
-
         #***********************************************************************
         #   Flag internal queue as paused
         #***********************************************************************
+        self.queue_is_paused = True
+        self.__loginfo("Waypoint queue is now paused.")
 
         #***********************************************************************
         #   If the drone is in AUTO mode --- ask it to stop execution
         #***********************************************************************
+        status = SUCCESS_ERR  # error flag to return to caller
+        if srv.SetMode.AUTO == self.uav_mode:
+            self.__loginfo("Trying to halt drone.")
+            status = self.__halt_drone()
+            if SUCCESS_ERR != status:
+                self.__logerr("Failed to halt drone after pausing queue.")
+        else:
+            self.__loginfo("Drone not in AUTO mode, so will not be halted"
+                    " following queue pause.")
+
+        return status
 
     def resume_queue_cb(self,req=None):
         """Callback for resuming execution of the queue
@@ -760,7 +823,29 @@ class Controller:
            Returns
            mavros/Error message indicating if the command was sent successfully
         """
-        pass
+
+        #***********************************************************************
+        #   Only really meaningful to resume queue if drone is in AUTO mode
+        #***********************************************************************
+        if srv.SetMode.AUTO == self.uav_mode:
+            self.__logwarn("Can only resume queue while drone is in AUTO mode")
+            return UNSUPPORTED_COMMAND_ERR
+
+        #***********************************************************************
+        #   To be safe, resync waypoints on drone from queue
+        #***********************************************************************
+        status = self.set_waypoints_from_queue()
+        if SUCCESS_ERR != status:
+            self.__logerr("Waypoints could not be synced with drone.")
+            return status
+        else:
+            self.__loginfo("Waypoints synced with drone.")
+
+        #***********************************************************************
+        #   Try to start execution from next waypoint
+        #***********************************************************************
+        next_wp = 0  # always waypoint 0 call to set_waypoints_from_queue
+        return self.__execute_mission_on_drone(next_wp)
 
     def land_cb(self,req=None):
         """Callback for landing the drone
@@ -771,7 +856,17 @@ class Controller:
            Returns
            mavros/Error message indicating if the command was sent successfully
         """
-        pass
+        request = srv.MAVCommandRequest()
+        request.mode = srv.MAVCommand.CMD_LAND
+        request.custom = srv.MAVCommand.CUSTOM_NO_OP
+
+        response = self.mav_command_srv(request)
+
+        if SUCCESS_ERR != response.status:
+           self.__logerr("Failed to send land request")
+        else:
+            self.__loginfo("Land request sent to drone.")
+        return response.status
 
     def takeoff_cb(self,req=None):
         """Callback for telling the drone to take-off
@@ -782,7 +877,17 @@ class Controller:
            Returns
            mavros/Error message indicating if the command was sent successfully
         """
-        pass
+        request = srv.MAVCommandRequest()
+        request.mode = srv.MAVCommand.CMD_TAKEOFF
+        request.custom = srv.MAVCommand.CUSTOM_NO_OP
+
+        response = self.mav_command_srv(request)
+
+        if SUCCESS_ERR != response.status:
+           self.__logerr("Failed to send takeoff request")
+        else:
+            self.__loginfo("Takeoff request sent successfully.")
+        return response.status
 
     def emergency_cb(self,req=None):
         """Callback for telling the drone to enter emergency mode
@@ -793,13 +898,36 @@ class Controller:
            Returns
            mavros/Error message indicating if the command was sent successfully
         """
-        pass
+        request = srv.MAVCommandRequest()
+        request.mode = srv.MAVCommand.CMD_CUSTOM_MODE
+        request.custom = srv.MAVCommand.CUSTOM_ARDONE_EMERGENCY
+
+        response = self.mav_command_srv(request)
+
+        if SUCCESS_ERR == response.status:
+            self.uav_mode == srv.SetMode.EMERGENCY
+            self.__logerr("Drone now in emergency mode.")
+        else:
+            self.__logerr("Drone failed to enter emergency mode")
+
+        return response.status
 
     def add_waypoints_cb(self,req):
         """Callback for adding a set of waypoints to the queue
            Implements mavros/AddWaypoints ROS service.
            See service definition for details
         """
+        #***********************************************************************
+        #   Validate all the waypoints
+        #***********************************************************************
+
+        #***********************************************************************
+        #   Add them to the queue
+        #***********************************************************************
+
+        #***********************************************************************
+        #   If we're in AUTO mode, sync them with the drone now
+        #***********************************************************************
         pass
 
     def add_sweep_cb(self,req):
@@ -807,15 +935,48 @@ class Controller:
            Implements mavros/AddSweep ROS service.
            See service definition for details
         """
-        pass
+
+        #***********************************************************************
+        #   Generate waypoints from specification
+        #***********************************************************************
+        waypoints = []
+
+        #***********************************************************************
+        #   Delegate the rest to the the add waypoints callback
+        #***********************************************************************
+        request = srv.AddWaypointsRequest()
+        request.waypoints = waypoints
+        return add_waypoints_cb(request)
 
     def add_spiral_out_cb(self,req):
         """Callback for adding waypoints to spiral out"""
-        pass
+
+        #***********************************************************************
+        #   Generate waypoints from specification
+        #***********************************************************************
+        waypoints = []
+
+        #***********************************************************************
+        #   Delegate the rest to the the add waypoints callback
+        #***********************************************************************
+        request = srv.AddWaypointsRequest()
+        request.waypoints = waypoints
+        return add_waypoints_cb(request)
 
     def add_spiral_in_cb(self,req):
         """Callback for adding waypoints to spiral in"""
-        pass
+
+        #***********************************************************************
+        #   Generate waypoints from specification
+        #***********************************************************************
+        waypoints = []
+
+        #***********************************************************************
+        #   Delegate the rest to the the add waypoints callback
+        #***********************************************************************
+        request = srv.AddWaypointsRequest()
+        request.waypoints = waypoints
+        return add_waypoints_cb(request)
 
     def manual_control_cb(self,vel):
         """Callback for directly controlling drones velocity
@@ -823,7 +984,50 @@ class Controller:
            Parameters
            vel - mavros/Velocity.msg specifying velocity vector
         """
-        pass
+        #***********************************************************************
+        #   Only accept velocity changes if we're in manual mode
+        #***********************************************************************
+
+        #***********************************************************************
+        #   Convert velocity into generic RC Command.
+        #   This is stored, and reset periodically by main loop in start()
+        #***********************************************************************
+
+        #***********************************************************************
+        #   Send immediately for good measure
+        #***********************************************************************
+
+    def start(self):
+        """Starts execution of controller"""
+
+        #***********************************************************************
+        #   Initialise ROS services, subscriptions, and publications
+        #***********************************************************************
+        self.__ros_init()
+
+        #**********************************************************************
+        #   Start diagnostics running
+        #**********************************************************************
+        diag_timer = rospy.Timer(DIAG_UPDATE_FREQ,self.update_diagnostics)
+
+        #***********************************************************************
+        #   Main loop - continue executing until we're interrupted
+        #***********************************************************************
+        while not rospy.is_shutdown():
+
+            #********************************************************************
+            #   Publish diagnostics periodically
+            #********************************************************************
+
+            #********************************************************************
+            #   If target velocity (for manual mode) has gone stale, reset it
+            #   to zero.
+            #********************************************************************
+
+            #********************************************************************
+            #   If we're in manual mode, publish target velocity periodically
+            #********************************************************************
+
 
 #*******************************************************************************
 #   Parse any arguments that follow the node command
