@@ -285,7 +285,7 @@ class Controller:
 
         # Validate each waypoint in turn
         for k in range(len(waypoint_list)):
-            done_wp = response.waypoints[k]
+            drone_wp = response.waypoints[k]
             my_wp = waypoint_list[k]
             if not self.__are_waypoints_equivalent(drone_wp,my_wp):
                 self.__logerr("Waypoint %d on drone is not correct after "
