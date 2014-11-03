@@ -844,8 +844,12 @@ class Controller:
         #***********************************************************************
         #   Try to start execution from next waypoint
         #***********************************************************************
+        self.queue_is_paused = False
         next_wp = 0  # always waypoint 0 call to set_waypoints_from_queue
-        return self.__execute_mission_on_drone(next_wp)
+        status = self.__execute_mission_on_drone(next_wp)
+        if SUCCESS_ERR != status:
+            self.queue_is_paused = True
+            Self.__logerr("Could not execute mission on drone. Pausing Queue.")
 
     def land_cb(self,req=None):
         """Callback for landing the drone
@@ -1063,4 +1067,3 @@ if __name__ == '__main__':
             node.start()
     except rospy.ROSInterruptException:
         pass
-
