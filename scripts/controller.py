@@ -72,6 +72,25 @@ MULTI_UAV_CONTROL_PREFIX = "/all/control/"
 # any longer.
 CURRENT_POSITION_TTL = rospy.Duration(secs=1.0)
 
+# Mavlink parameter keys used to configure drone's safe flight zone
+# If synced with drone, the drone should obey them automatically,
+# but we use them for internal waypoint verification as an extra precaution
+MIN_WAYPOINT_ALTITUDE_PARAM = 'WPT-ALTI-MIN'
+MAX_WAYPOINT_ALTITUDE_PARAM = 'WPT-ALTI-MAX'
+SAFE_FLIGHT_ZONE_RADIUS_PARAM = 'FLIGHT-ZONE-RAD'
+
+# The following mavling parameters control the active camera on the AR.Drone
+# Only one can be 1.0 (i.e active) at any given time. 
+USE_BOTTOM_CAMERA_PARAM = 'CAM-RECORD_VERT'  # 1.0 for yes, 0.0 for false
+USE_FRONT_CAMERA_PARAM = 'CAM-RECORD_HORI'  # 1.0 for yes, 0.0 for false
+
+# Default mavlink parameters used when none are available from ROS Parameter
+# server. Other parameters may be set in parameter server, but require that
+# these ones always have sensible values
+DEFAULT_MIN_WAYPOINT_ALTITUDE = 0.5  # in metres
+DEFAULT_MAX_WAYPOINT_ALTITUDE = 5.0  # in metres
+DEFAULT_SAFE_FLIGHT_ZONE_RADIUS = 50.0  # in metres
+
 #*******************************************************************************
 #   Classes
 #*******************************************************************************
@@ -125,6 +144,10 @@ class Controller:
         # set by message received on set_origin topic
         self.origin = None
 
+        # Local copy of mavlink parameters that should be set on drone
+        # Should be initialised and synced with drone at start up
+        self.drone_params = None
+
     def __logerr(self,msg):
         """Used for logging error messages
            
@@ -156,6 +179,39 @@ class Controller:
            msg - string to log
         """
         rospy.logdebug(self.log_prefix + msg)
+
+    def __valid_waypoint(self,waypoint):
+        """Validates a Waypoint message as far as possible
+
+           Parameter:
+           waypoint - mavros/Waypoint.msg object
+
+           Returns True if the Waypoint is valid, false otherwise
+        """
+
+        #**********************************************************************
+        #   Validate latitude and longitude for Global waypoints
+        #**********************************************************************
+
+        #**********************************************************************
+        #   Only allow LOCAL waypoints if our origin is set
+        #**********************************************************************
+
+        #**********************************************************************
+        #   Disallow waypoints in any unsupported or undefined frame
+        #**********************************************************************
+
+        #**********************************************************************
+        #   Range check altitude
+        #**********************************************************************
+
+        #**********************************************************************
+        #   Ensure we're a safe distance from our current position
+        #**********************************************************************
+
+        #**********************************************************************
+        #   If possible, ensure we're a safe distance from our origin
+        #**********************************************************************
 
     def __are_waypoints_equivalent(self,wp1,wp2,tol=1.0):
         """Compares two waypoints to see if they are equivalent.
@@ -782,7 +838,34 @@ class Controller:
            Returns
            mavros/Error message indicating success or failure
         """
-        pass
+        #***********************************************************************
+        #   As precaution, start by pausing queue and its execution on the
+        #   drone.
+        #***********************************************************************
+        status = self.pause_queue_cb()
+        if SUCCESS_ERR != status:
+            self.logerr("Failed to clear queue, due to failure to pause.")
+            return
+
+        #***********************************************************************
+        #   Clear internal queue structure
+        #***********************************************************************
+        del self.waypoint_queue[:]
+
+        #***********************************************************************
+        #   Try to clear all waypoints stored on the drone
+        #***********************************************************************
+        request = srv.MAVCommandRequest()
+        request.command = srv.MAVCommandRequest.CMD_CLEAR_WAYPOINTS
+        request.custom = srv.MAVCommandRequest.CUSTOM_NO_OP
+        response = self.mav_command_srv(request)
+        if SUCCESS_ERR != response.status:
+            self.__logerr("Could not clear waypoints on drone")
+            self.__logwarn("Waypoints cleared but may be out of sync with"
+                    " drone.")
+        else:
+            self.__loginfo("Waypoint queue cleared and synced with drone.")
+        return response.status
 
     def pause_queue_cb(self,req=None):
         """Callback for pausing execution of the queue
@@ -850,6 +933,7 @@ class Controller:
         if SUCCESS_ERR != status:
             self.queue_is_paused = True
             Self.__logerr("Could not execute mission on drone. Pausing Queue.")
+        return status
 
     def land_cb(self,req=None):
         """Callback for landing the drone
@@ -924,15 +1008,27 @@ class Controller:
         #***********************************************************************
         #   Validate all the waypoints
         #***********************************************************************
+        for wp in req.waypoints:
+            if not self.__valid_waypoint(wp):
+                self.logerr("Cannot add waypoints because one or more "
+                        " waypoints are invalid.")
+                return WAYPOINT_VERIFICATION_FAILURE
 
         #***********************************************************************
         #   Add them to the queue
         #***********************************************************************
+        self.waypoint_queue.extend(req.waypoints)
 
         #***********************************************************************
         #   If we're in AUTO mode, sync them with the drone now
+        #   Otherwise, they'll be synced when we next resume the queue in 
+        #   AUTO mode.
         #***********************************************************************
-        pass
+        status = self.__set_waypoints_from_queue():
+        if SUCCESS_ERR != status:
+            self.logerr("Failed to add and sync waypoints with drone")
+
+        return status
 
     def add_sweep_cb(self,req):
         """Callback for adding a set of waypoints to the queue
@@ -1005,6 +1101,14 @@ class Controller:
         """Starts execution of controller"""
 
         #***********************************************************************
+        #   Try to load and sync parameters with drone
+        #***********************************************************************
+        status = self.__load_params_on_drone()
+        if SUCCESS_ERR != status:
+            self.__logfatal("Failed to load and sync parameters with drone.")
+            return
+
+        #***********************************************************************
         #   Initialise ROS services, subscriptions, and publications
         #***********************************************************************
         self.__ros_init()
@@ -1025,7 +1129,7 @@ class Controller:
 
             #********************************************************************
             #   If target velocity (for manual mode) has gone stale, reset it
-            #   to zero.
+            #   to zero, so drone doesn't fly away
             #********************************************************************
 
             #********************************************************************
