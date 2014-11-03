@@ -10,6 +10,8 @@
     In future, we could implement some of these using the action library,
     but don't feel the extra complexity is warranted right now.
 
+    /uav_name/control/select_camera -- select active camera (AR.Drone only)
+
     /uav_name/control/set_mode, mavros/SetMode, switch between emergency, auto
         and manual control.
 
@@ -179,6 +181,73 @@ class Controller:
            msg - string to log
         """
         rospy.logdebug(self.log_prefix + msg)
+
+    def __load_drone_params(self):
+        """Loads drone parameters from ROS parameter server
+           
+           Parameters are stored on ROS parameter server as a single
+           dictionary called 'drone_params'. This contains key-value pairs
+           for directly loading onto drone using mavlink.
+        """
+        #**********************************************************************
+        #   Load any parameters set on ROS parameter server
+        #**********************************************************************
+
+        #**********************************************************************
+        #   If any safe flight zone parameters are undefined, give a warning
+        #   and set defaults
+        #**********************************************************************
+
+    def __sync_params_with_drone(self):
+        """Syncs internally stored parameters with drone
+
+           Local parameters overwrite drone parameters.
+           However, we keep any parameters on the drone that are not
+           defined locally.
+        """
+        #**********************************************************************
+        #   Try to load parameters on drone
+        #**********************************************************************
+
+        #**********************************************************************
+        #   Try to read them back
+        #**********************************************************************
+
+        #**********************************************************************
+        #   Ensure that any key-value pairs already defined local have been
+        #   set correctly on drone
+        #**********************************************************************
+
+        #**********************************************************************
+        #   If we're happy, then store any additional parameters stored on
+        #   drone locally.
+        #**********************************************************************
+
+    def __current_position_safe(self):
+        """Returns true if our current position is unsafe"""
+
+        #**********************************************************************
+        #   If position is unknown we assume its not safe
+        #**********************************************************************
+
+        #**********************************************************************
+        #   If position is all zeros, we can pretty sure we don't have a
+        #   a GPS lock, so we'll assume this is unsafe
+        #**********************************************************************
+
+        #**********************************************************************
+        #   If our altitude is outside allowable waypoint range by reasonable
+        #   margin of error - that's unsafe
+        #**********************************************************************
+
+        #**********************************************************************
+        #   If our position is too far from origin thats unsafe
+        #**********************************************************************
+
+        #**********************************************************************
+        #   In all other cases, assume everything is ok
+        #**********************************************************************
+        return True
 
     def __valid_waypoint(self,waypoint):
         """Validates a Waypoint message as far as possible
@@ -431,7 +500,7 @@ class Controller:
             self.__logerr("Could not start waypoint following on drone")
         return response.status
             
-    def __halt_drone():
+    def __halt_drone(self):
         """Asks the drone to loiter if in AUTO mode.
 
            Returns SUCCESS_ERR if successful
@@ -486,6 +555,9 @@ class Controller:
         #**********************************************************************
         #   Initialise ROS services we provide
         #**********************************************************************
+        rospy.Service(self.control_prefix + "select_camera", srv.SelectCamera,
+            self.select_camera_cb)
+
         rospy.Service(self.control_prefix + "set_mode", srv.SetMode,
             self.set_mode_cb)
 
@@ -560,19 +632,48 @@ class Controller:
         """Used to produce ROS diagnostics about current controller state"""
 
         #**********************************************************************
-        #   Calculate diagnostics about origin and current position
+        #   Initialise summary string and error level. These determine
+        #   how diagnostics appear at top level of ROS runtime monitor GUI
+        #
+        #   Note: we assume that more serious error levels have higher
+        #   integer values, so that we can use the maximum value of two
+        #   levels to choose the most serious one
+        #**********************************************************************
+        summary_string = ""  # we'll add to this later
+        error_level = DIAG_OK  # initiall assume everything is ok
+
+        #**********************************************************************
+        #   Generate diagnostics about origin
         #**********************************************************************
         is_origin_set = not (self.origin is None)
+        if is_origin_set:
+            origin_status = "SET"
+        else:
+            origin_status = "NOT SET"
+            error_level = max(error_level,DIAG_WARN)
+            summary_string = summary_string + "ORIGIN NOT SET. "
+
+        status.add("Origin set", origin_status)
+
+        #**********************************************************************
+        #   Calculate diagnostics about current position
+        #**********************************************************************
         is_pos_stale = rospy.Time.now()-self.current_position_timestamp > \
                        CURRENT_POSITION_TTL
         is_pos_set = not (self.current_position is None)
 
         if not is_pos_set:
+            error_level = max(error_level,DIAG_WARN)
+            summary_string = summary_string + "POSITION UNKNOWN. "
             pos_status = "Not known"
         elif is_pos_stale:
+            error_level = max(error_level,DIAG_ERROR)
             pos_status = "stale"
         else:
+            pos_error_level = DIAG_OK
             pos_status = "Up to date"
+
+        status.add("Position status", pos_status)
 
         #**********************************************************************
         #   If possible, calculate distance from origin
@@ -583,22 +684,52 @@ class Controller:
             distance_from_origin = total_distance(pos,origin)
         else:
             distance_from_origin = "UNKNOWN"
+        status.add("Distance from origin", distance_from_origin)
 
         #**********************************************************************
-        #   Fill useful details
+        #   Give a warning if we're outside safe flight zone
         #**********************************************************************
-        status.add("Controller state", self.uav_mode)
+        if not self.__current_position_safe():
+            summary_string = summary_string + "UNSAFE POSITION"
+            error_level = max(error_level,DIAG_WARN)
+
+        #**********************************************************************
+        #   Generate useful diagnostics about current UAV Mode
+        #**********************************************************************
+        if srv.SetMode.UNKNOWN == self.uav_mode:  
+            mode_status = "UNKNOWN"
+            summary_string = summary_string + "UAV mode unknown. "
+            error_level = max(error_level,DIAG_WARN)
+
+        if srv.SetMode.AUTO == self.uav_mode:
+            mode_status = "AUTO"
+            summary_string = summary_string + "UAV in AUTO. "
+
+        if srv.SetMode.MANUAL == self.uav_mode:
+            mode_status = "MANUAL"
+            summary_string = summary_string + "UAV in MANUAL. "
+        if srv.SetMode.EMERGENCY == self.uav_mode:
+            mode_status = "EMERGENCY"
+            summary_string = summary_string + "UAV in EMERGENCY! "
+            error_level = max(error_level,DIAG_WARN)
+        else:
+            summary_string = summary_string + "UAV mode undefined! "
+            error_level = max(error_level,DIAG_ERROR)
+            mode_status = "UNDEFINED"
+
+        status.add("Controller state", mode_status)
+
+        #**********************************************************************
+        #   Fill in useful details about the queue
+        #**********************************************************************
         status.add("Waypoint queue paused", self.queue_is_paused)
         status.add("Waypoints queued", len(self.waypoint_queue) )
         status.add("Current waypoint", self.current_waypoint)
-        status.add("Origin set", is_origin_set)
-        status.add("Position status", pos_status)
-        status.add("Distance from origin", distance_from_origin)
 
         #**********************************************************************
         #   Fill in summary and report error conditions
         #**********************************************************************
-        status.summary(DIAG_OK, "TODO Need better summary")
+        status.summary(error_level, summary_string)
         return status
 
     def update_diagnostics(self):
@@ -701,6 +832,33 @@ class Controller:
         del self.waypoint_queue[0:newly_completed] 
         self.__loginfo("%d waypoints dequeued" % newly_completed)
         return
+
+    def select_camera_cb(self,req):
+        """Callback for mavros/SelectCamera service
+
+           Asks drone to select specified camera. Only makes since for
+           AR.Drones.
+
+           Parameters
+           req - mavros/SelectCamera.srv request
+
+           See service definition for details.
+        """
+        #***********************************************************************
+        #   Select front camera on request
+        #***********************************************************************
+
+        #***********************************************************************
+        #   Select bottom camera on request
+        #***********************************************************************
+
+        #***********************************************************************
+        #   Ignore requests for any unknown or undefined camera
+        #***********************************************************************
+
+        #***********************************************************************
+        #   Try to sync updated camera parameters with drone
+        #***********************************************************************
 
     def set_mode_cb(self,req):
         """Callback for mavros/SetMode service
@@ -1101,11 +1259,19 @@ class Controller:
         """Starts execution of controller"""
 
         #***********************************************************************
-        #   Try to load and sync parameters with drone
+        #   Try to load drone parameters from ROS Parameter server
         #***********************************************************************
-        status = self.__load_params_on_drone()
+        status = self.__load_drone_params()
         if SUCCESS_ERR != status:
-            self.__logfatal("Failed to load and sync parameters with drone.")
+            self.__logfatal("Failed to load parameters for drone.")
+            return
+
+        #***********************************************************************
+        #   Try to sync parameters with drone
+        #***********************************************************************
+        status = self.__sync_params_with_drone()
+        if SUCCESS_ERR != status:
+            self.__logfatal("Failed to sync parameters with drone.")
             return
 
         #***********************************************************************

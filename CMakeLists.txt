@@ -70,6 +70,7 @@ add_service_files(
   SetWaypoints.srv
   AddWaypoints.srv
   SetMode.srv
+  SelectCamera.srv
   SimpleCommand.srv
 )
 
