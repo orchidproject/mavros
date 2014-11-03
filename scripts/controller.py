@@ -74,6 +74,16 @@ MULTI_UAV_CONTROL_PREFIX = "/all/control/"
 # any longer.
 CURRENT_POSITION_TTL = rospy.Duration(secs=1.0)
 
+# ROS Parameter namespace in which to look for drone parameters
+# We assume that any key-value pairs in this namespace can be directly
+# understood by drone using mavlink
+DRONE_PARAM_NAMESPACE = "/drone_params"
+
+# ROS Parameter namespace containing list of active drones. If the
+# drone that this node is suppose to control is not in this list, the 
+# node will terminate on startup.
+ACTIVE_DRONE_NAMESPACE = "/drones_active"
+
 # Mavlink parameter keys used to configure drone's safe flight zone
 # If synced with drone, the drone should obey them automatically,
 # but we use them for internal waypoint verification as an extra precaution
@@ -148,7 +158,7 @@ class Controller:
 
         # Local copy of mavlink parameters that should be set on drone
         # Should be initialised and synced with drone at start up
-        self.drone_params = None
+        self.drone_params = {}  # dictionary of key-value pairs
 
     def __logerr(self,msg):
         """Used for logging error messages
@@ -188,15 +198,35 @@ class Controller:
            Parameters are stored on ROS parameter server as a single
            dictionary called 'drone_params'. This contains key-value pairs
            for directly loading onto drone using mavlink.
+
+           Defaults are used for parameters required for safe flight
         """
         #**********************************************************************
         #   Load any parameters set on ROS parameter server
         #**********************************************************************
+        self.drone_params = rospy.get_param(DRONE_PARAM_NAMESPACE)
 
         #**********************************************************************
         #   If any safe flight zone parameters are undefined, give a warning
         #   and set defaults
         #**********************************************************************
+        if not MIN_WAYPOINT_ALTITUDE_PARAM in self.drone_params:
+            self.__logwarn("Min Altitude not set -- using default %f" %
+                DEFAULT_MIN_WAYPOINT_ALTITUDE)
+            self.drone_params[MIN_WAYPOINT_ALTITUDE_PARAM] = \
+                DEFAULT_MIN_WAYPOINT_ALTITUDE
+
+        if not MAX_WAYPOINT_ALTITUDE_PARAM in self.drone_params:
+            self.__logwarn("Max Altitude not set -- using default %f" %
+                DEFAULT_MAX_WAYPOINT_ALTITUDE)
+            self.drone_params[MAX_WAYPOINT_ALTITUDE_PARAM] = \
+                DEFAULT_MAX_WAYPOINT_ALTITUDE
+
+        if not SAFE_FLIGHT_ZONE_RADIUS_PARAM in self.drone_params:
+            self.__logwarn("Safe flight radius not set -- using default %f" %
+                DEFAULT_SAFE_FLIGHT_ZONE_RADIUS)
+            self.drone_params[SAFE_FLIGHT_ZONE_RADIUS_PARAM] = \
+                DEFAULT_SAFE_FLIGHT_ZONE_RADIUS
 
     def __sync_params_with_drone(self):
         """Syncs internally stored parameters with drone
@@ -208,20 +238,55 @@ class Controller:
         #**********************************************************************
         #   Try to load parameters on drone
         #**********************************************************************
+        request = srv.SetParameterRequest()
+        request.keys = self.drone_params.keys()
+        request.values = self.drone_params.values()
+        try:
+            response = self.set_params_srv(request)
+
+        except rospy.ServiceException as e:
+            self.__logerr("Exception occurred while sending parameters "
+                    "to drone %s" % e)
+            return SERVICE_CALL_FAILED_ERR
+
+        if SUCCESS_ERR != response.status:
+            self.__logerr("Failed to send parameters to drone")
+            return response.status
 
         #**********************************************************************
         #   Try to read them back
         #**********************************************************************
+        try:
+            response = self.get_params_srv()
+
+        except rospy.ServiceException as e:
+            self.__logerr("Exception occurred while sending parameters "
+                    "to drone %s" % e)
+            return SERVICE_CALL_FAILED_ERR
+
+        if SUCCESS_ERR != response.status:
+            self.__logerr("Failed to send parameters to drone")
+            return response.status
 
         #**********************************************************************
-        #   Ensure that any key-value pairs already defined local have been
+        #   Ensure that any key-value pairs already defined locally have been
         #   set correctly on drone
         #**********************************************************************
+        params_from_drone = zip(response.keys(),response.values())
+        for key,value in self.drone_params.iteritems():
+            if not key in params_from_drone:
+                self.__logerr("Failed to set parameter %s on drone" % key)
+                return PARAM_NOT_SET
+            elif value != params_from_drone[key]
+                self.__logerr("Parameter %s has wrong value on drone." % key)
+                return BAD_PARAM_VALUE
 
         #**********************************************************************
         #   If we're happy, then store any additional parameters stored on
         #   drone locally.
         #**********************************************************************
+        self.drone_params = params_from_drone
+        return SUCCESS_ERR
 
     def __current_position_safe(self):
         """Returns true if our current position is unsafe"""
@@ -424,21 +489,33 @@ class Controller:
         #**********************************************************************
         #   Try to send the waypoints to the drone
         #**********************************************************************
-        response = self.set_waypoints_srv(waypoint_list)
-        if SUCCESS_ERR != response.status:
-            self.__logerr("Failed to send waypoints to drone")
-            return response.status
+        try: 
+            response = self.set_waypoints_srv(waypoint_list)
+            if SUCCESS_ERR != response.status:
+                self.__logerr("Failed to send waypoints to drone")
+                return response.status
+
+        except rospy.ServiceException as e:
+            self.__logerr("Exception occurred while sending waypoints "
+                    "to drone: %s" % e)
+            return SERVICE_CALL_FAILED_ERR
 
         #**********************************************************************
         #   Pull the waypoints back of the drone and verify that they
         #   are correct
         #**********************************************************************
         # Get waypoints
-        response = self.get_waypoints_srv()
-        if SUCCESS_ERR != response.status:
-            self.__logerr("Failed to retrieve wayponts from drone for"
-                    " verification")
-            return response.status
+        try:
+            response = self.get_waypoints_srv()
+            if SUCCESS_ERR != response.status:
+                self.__logerr("Failed to retrieve waypoints from drone for"
+                        " verification")
+                return response.status
+
+        except rospy.ServiceException as e:
+            self.__logerr("Exception occurred while getting waypoints "
+                    "from drone for verification: %s" % e)
+            return SERVICE_CALL_FAILED_ERR
 
         # Validate number of waypoints
         if len(response.waypoints) != len(waypoint_list):
@@ -484,10 +561,16 @@ class Controller:
         #**********************************************************************
         #   Try to set the current mission to the specified waypoint
         #**********************************************************************
-        response = self.set_mission_srv(wp_number)
-        if SUCCESS_ERR != response.status:
-            self.__logerr("Could not set current mission on drone")
-            return response.status
+        try:
+            response = self.set_mission_srv(wp_number)
+            if SUCCESS_ERR != response.status:
+                self.__logerr("Could not set current mission on drone")
+                return response.status
+
+        except rospy.ServiceException as e:
+            self.__logerr("Exception occurred setting mission "
+                    "on drone: %s" % e)
+            return SERVICE_CALL_FAILED_ERR
 
         #**********************************************************************
         #   Try get the drone to resume execution
@@ -495,10 +578,16 @@ class Controller:
         cmdRequest = srv.MAVCommandRequest()
         cmdRequest.command = srv.MAVCommandRequest.CMD_RESUME
         cmdRequest.custom = srv.MAVCommandRequest.CUSTOM_NO_OP
-        response = self.mav_command_srv(request)
-        if SUCCESS_ERR != response.status:
-            self.__logerr("Could not start waypoint following on drone")
-        return response.status
+        try:
+            response = self.mav_command_srv(request)
+            if SUCCESS_ERR != response.status:
+                self.__logerr("Could not start waypoint following on drone")
+            return response.status
+
+        except rospy.ServiceException as e:
+            self.__logerr("MAVCommand service threw exception while trying to"
+                    "resume waypoint execution: %s" % e)
+            return SERVICE_CALL_FAILED_ERR
             
     def __halt_drone(self):
         """Asks the drone to loiter if in AUTO mode.
@@ -520,12 +609,18 @@ class Controller:
         request = srv.MAVCommandRequest()
         request.command = srv.MAVCommandRequest.CMD_HALT
         request.custom = srv.MAVCommandRequest.CUSTOM_NO_OP
-        response = self.mav_command_srv(request)
-        if SUCCESS_ERR != response.status:
-            self.__logerr("Could not halt drone")
-        else:
-            self.__loginf("Halted drone.")
-        return response.status
+        try:
+            response = self.mav_command_srv(request)
+            if SUCCESS_ERR != response.status:
+                self.__logerr("Could not halt drone")
+            else:
+                self.__loginf("Halted drone.")
+            return response.status
+
+        except rospy.ServiceException as e:
+            self.__logerr("MAVCommand service threw exception while trying to"
+                    "halt drone: %s" % e)
+            return SERVICE_CALL_FAILED_ERR
 
     def __ros_init(self):
         """Initialises ROS services, publications and subscriptions"""
@@ -895,7 +990,14 @@ class Controller:
             request = srv.MAVCommandRequest()
             request.mode = srv.MAVCommand.CMD_MANUAL
             request.custom = srv.MAVCommand.CUSTOM_NO_OP
-            response = self.mav_command_srv(request)
+
+            try:
+                response = self.mav_command_srv(request)
+            except rospy.ServiceException as e:
+                self.__logerr("MAVCommand service threw exception while trying"
+                    "to set mode to MANUAL: %s" % e)
+                return SERVICE_CALL_FAILED_ERR
+
             if SUCCESS_ERR == response.status:
                 self.uav_mode == srv.SetMode.MANUAL
             else:
@@ -909,7 +1011,14 @@ class Controller:
             request = srv.MAVCommandRequest()
             request.mode = srv.MAVCommand.CMD_AUTO
             request.custom = srv.MAVCommand.CUSTOM_NO_OP
-            response = self.mav_command_srv(request)
+
+            try:
+                response = self.mav_command_srv(request)
+            except rospy.ServiceException as e:
+                self.__logerr("MAVCommand service threw exception while trying"
+                    "to set mode to AUTO: %s" % e)
+                return SERVICE_CALL_FAILED_ERR
+
             if SUCCESS_ERR == response.status:
                 self.uav_mode == srv.SetMode.AUTO
             else:
@@ -1016,7 +1125,14 @@ class Controller:
         request = srv.MAVCommandRequest()
         request.command = srv.MAVCommandRequest.CMD_CLEAR_WAYPOINTS
         request.custom = srv.MAVCommandRequest.CUSTOM_NO_OP
-        response = self.mav_command_srv(request)
+
+        try:
+            response = self.mav_command_srv(request)
+        except rospy.ServiceException as e:
+            self.__logerr("MAVCommand service threw exception while trying"
+                "to clear waypoints: %s" % e)
+            return SERVICE_CALL_FAILED_ERR
+
         if SUCCESS_ERR != response.status:
             self.__logerr("Could not clear waypoints on drone")
             self.__logwarn("Waypoints cleared but may be out of sync with"
@@ -1106,7 +1222,12 @@ class Controller:
         request.mode = srv.MAVCommand.CMD_LAND
         request.custom = srv.MAVCommand.CUSTOM_NO_OP
 
-        response = self.mav_command_srv(request)
+        try:
+            response = self.mav_command_srv(request)
+        except rospy.ServiceException as e:
+            self.__logerr("MAVCommand service threw exception while trying"
+                "to land drone: %s" % e)
+            return SERVICE_CALL_FAILED_ERR
 
         if SUCCESS_ERR != response.status:
            self.__logerr("Failed to send land request")
@@ -1127,7 +1248,12 @@ class Controller:
         request.mode = srv.MAVCommand.CMD_TAKEOFF
         request.custom = srv.MAVCommand.CUSTOM_NO_OP
 
-        response = self.mav_command_srv(request)
+        try:
+            response = self.mav_command_srv(request)
+        except rospy.ServiceException as e:
+            self.__logerr("MAVCommand service threw exception while trying"
+                "to take-off: %s" % e)
+            return SERVICE_CALL_FAILED_ERR
 
         if SUCCESS_ERR != response.status:
            self.__logerr("Failed to send takeoff request")
@@ -1148,7 +1274,12 @@ class Controller:
         request.mode = srv.MAVCommand.CMD_CUSTOM_MODE
         request.custom = srv.MAVCommand.CUSTOM_ARDONE_EMERGENCY
 
-        response = self.mav_command_srv(request)
+        try:
+            response = self.mav_command_srv(request)
+        except rospy.ServiceException as e:
+            self.__logerr("MAVCommand service threw exception while trying"
+                "to enter EMERGENCY mode: %s" % e)
+            return SERVICE_CALL_FAILED_ERR
 
         if SUCCESS_ERR == response.status:
             self.uav_mode == srv.SetMode.EMERGENCY
@@ -1312,7 +1443,7 @@ parser = OptionParser("mosaic_node.py [options]")
 parser.add_option("-n", "--name", dest="name", default="parrot",
     help="Name of the prefix for the mavros node")
 parser.add_option("-r", "--ros", action="store_true", dest="ros",
-    help="Use ROS parameter server", default=False)
+    help="Use ROS parameter server", default=True)
 (opts, args) = parser.parse_args()
 
 #*******************************************************************************
@@ -1321,7 +1452,7 @@ parser.add_option("-r", "--ros", action="store_true", dest="ros",
 #*******************************************************************************
 if __name__ == '__main__':
     try:
-        if not opts.ros or opts.name in rospy.get_param("/drones_active"):
+        if not opts.ros or opts.name in rospy.get_param(ACTIVE_DRONE_NAMESPACE):
             rospy.init_node("mavros_controller")
             rospy.loginfo("[CONTROL %s] waiting for driver services" %
                     opts.name)

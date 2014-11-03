@@ -48,6 +48,7 @@ UNDEFINED_WAYPOINT_ERR       = Error(code=Error.UNDEFINED_WAYPOINT)
 WAYPOINT_VERIFICATION_FAILURE_ERR = \
     Error(code=Error.WAYPOINT_VERIFICATION_FAILURE)
 NO_GPS_FIX_ERR               = Error(code.Error.NO_GPS_FIX)
+SERVICE_CALL_FAILED_ERR      = Error(code.Error.SERVICE_CALL_FAILED)
 
 #******************************************************************************
 #   Utility classes
