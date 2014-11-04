@@ -147,6 +147,7 @@ include_directories(
 install(PROGRAMS
   scripts/driver.py
   scripts/queue_node.py
+  scripts/controller.py
   scripts/nav_gui.py
   DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION}
 )

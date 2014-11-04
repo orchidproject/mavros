@@ -57,7 +57,7 @@ UNKNOWN_CAMERA_ERR           = Error(code.Error.UNKNOWN_CAMERA)
 class UTMWaypoint:
     """Utility class used to represent UTM coordinates"""
 
-    def __init__(self, easting=0.0, northing=0.0, altitude=0.0
+    def __init__(self, easting=0.0, northing=0.0, altitude=0.0,
         zone_number=None, zone_letter=None):
     """Constructs new instance with specified parameters
 
