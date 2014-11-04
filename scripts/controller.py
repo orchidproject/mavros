@@ -1660,7 +1660,7 @@ if __name__ == '__main__':
         #   Register ROS Node
         #***********************************************************************
         drone = opts.name  # name of drone to control
-        rospy.init_node("%s-controller" % drone)
+        rospy.init_node("%s_controller" % drone)
 
         #***********************************************************************
         #   If our drone is not listed as active on the ROS Parameter server
