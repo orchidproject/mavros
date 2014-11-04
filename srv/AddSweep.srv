@@ -1,0 +1,9 @@
+float32 start_easting
+float32 start_northing
+float32 end_easting
+float32 end_northing
+float32 row_width
+float32 wp_interval
+float32 altitude
+---
+Error status

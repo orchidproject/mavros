@@ -6,7 +6,7 @@ bool autocontinue
 # Range (in metres) that MAV must get within waypoint to consider
 # it reached. Required because reaching waypoint exactly is 
 # impossible
-float32 radius 
+float64 radius 
 
 # wait time to hold at waypoint before continuing
 duration waitTime
@@ -29,6 +29,6 @@ uint8 FRAME_LOCAL   = 2    # local ENU (east/north/up) coordinates
                            #    z: up
 
 # Waypoint coordinates specified in coordinate frame 
-float32 x
-float32 y
-float32 z
+float64 x
+float64 y
+float64 z

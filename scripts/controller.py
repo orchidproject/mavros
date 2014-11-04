@@ -35,6 +35,8 @@
     Publications
     ------------
     /diagnostics - provides status information via the ROS diagnostics package
+    /all/control/set_origin - broadcasts new origin for all UAVs (see below)
+    /uav_name/manual_control - Used to control UAV velocity in manual mode
 
     Subscriptions
     -------------
@@ -52,6 +54,7 @@
     /all/control/set_origin - tell all UAVs to set specified GPS waypoint as
         origin for local coordinate frame.
 """
+import threading
 from copy import deepcopy
 import rospy
 import mavros.srv as srv
@@ -73,6 +76,23 @@ MULTI_UAV_CONTROL_PREFIX = "/all/control/"
 # If we current position isn't updated within this time, we don't trust it
 # any longer.
 CURRENT_POSITION_TTL = rospy.Duration(secs=1.0)
+
+# Time To Live before target velocity is reset to zero. This is to prevent
+# UAV flying away when there is no active Remote Control input
+VELOCITY_TTL = rospy.Duration(secs=0.2)
+
+# How often to send RC commands to drone to control its velocity
+VELOCITY_UPDATE_RATE = rospy.Rate(10)  # in hertz
+
+# Constants used for conversion between velocities (in range [-1,1]) and
+# RC channel inputs
+RC_ZERO_POINT = 1500  # RC input that indicates zero velocity
+RC_COEFFICIENT = 500  # 500*velocity+1500 = RC input
+
+# Only the first 4 RC channels are used to control velocity.
+# The rest are ignored.
+RC_VEL_START = 0  # First RC velocity channel
+RC_VEL_END = 4  # Last RC velocity channel + 1
 
 # ROS Parameter namespace in which to look for drone parameters
 # We assume that any key-value pairs in this namespace can be directly
@@ -141,6 +161,16 @@ class Controller:
 
         # drone's current target waypoint
         self.current_waypoint = 0
+
+        # Next Remote Control message to send during manual mode.
+        # This encodes the target velocity, and should be zero when
+        # no velocity has been requested within VELOCITY_TTL period.
+        self.next_rc = msg.RC()
+        self.next_rc.channel = [RC_ZERO_POINT]*len(self.next_rc.channel)
+
+        # Time last time next_rc was updated. If this is more than
+        # VELOCITY_TTL ago, we must reset to 0 to prevent drone flying away
+        self.next_rc_timestamp = rospy.Time.now()
 
         # Drone's current position as a tools.GlobalWaypoint object
         # Undefined if we haven't heard its position for more than
@@ -625,6 +655,18 @@ class Controller:
     def __ros_init(self):
         """Initialises ROS services, publications and subscriptions"""
 
+        #***********************************************************************
+        #   Wait for mavros driver to initialise
+        #***********************************************************************
+        self.__loginfo("Waiting for driver services")
+        rospy.wait_for_service(self.control_prefix + "mav_command")
+        rospy.wait_for_service(self.control_prefix + "set_waypoints")
+        rospy.wait_for_service(self.control_prefix + "get_waypoints")
+        rospy.wait_for_service(self.control_prefix + "set_params")
+        rospy.wait_for_service(self.control_prefix + "get_params")
+        rospy.wait_for_service(self.control_prefix + "set_mission")
+        self.__loginfo("Initialising high-level control")
+
         #**********************************************************************
         #   Initialise proxy functions for remote services we call.
         #   These are all provided by the mavros driver node 
@@ -711,10 +753,15 @@ class Controller:
             msg.FilteredPosition, self.filtered_position_cb)
 
         #**********************************************************************
-        #   Advertise messages that we publish
+        #   Advertise messages that we publish. 
+        #   Note: don't need to advertise diagnostic messages explicitly.
+        #   That's done by diagnostics updater.
         #**********************************************************************
         self.pub_origin = rospy.Publisher(MULTI_UAV_CONTROL_PREFIX + \
             "set_origin", msg.Waypoint, queue_size=1)
+
+        self.pub_rc = rospy.Publisher(self.driver_prefix + \
+            "manual_control", msg.RC, queue_size=1)
 
         #**********************************************************************
         #   Setup ROS diagnostics updater
@@ -987,10 +1034,18 @@ class Controller:
         #   Ask drone to enter MANUAL mode
         #***********************************************************************
         if req.mode == srv.SetMode.MANUAL:
+
+            # As precaution, reset target velocity to zero now, to ensure
+            # UAV doesn't fly off
+            self.next_rc.channel = [RC_ZERO_POINT]*len(self.next_rc.channel)
+            self.next_rc_timestamp = rospy.Time.now()
+
+            # Construct request
             request = srv.MAVCommandRequest()
             request.mode = srv.MAVCommand.CMD_MANUAL
             request.custom = srv.MAVCommand.CUSTOM_NO_OP
 
+            # try to send request
             try:
                 response = self.mav_command_srv(request)
             except rospy.ServiceException as e:
@@ -998,6 +1053,7 @@ class Controller:
                     "to set mode to MANUAL: %s" % e)
                 return SERVICE_CALL_FAILED_ERR
 
+            # if we get that far, return error status from driver
             if SUCCESS_ERR == response.status:
                 self.uav_mode == srv.SetMode.MANUAL
             else:
@@ -1376,15 +1432,23 @@ class Controller:
         #***********************************************************************
         #   Only accept velocity changes if we're in manual mode
         #***********************************************************************
+        if srv.SetMode.MANUAL != self.uav_mode:
+            self.__logwarn("Velocities only accepted in manual mode")
+            return
 
         #***********************************************************************
         #   Convert velocity into generic RC Command.
-        #   This is stored, and reset periodically by main loop in start()
+        #   This is stored, and resent periodically by main loop in start()
         #***********************************************************************
+        self.next_rc_timestamp = rospy.Time.now()
+        for i in range(RC_VEL_START,RC_VEL_END):
+            self.next_rc.channel[i] = \
+                vel.velocity[i]*RC_COEFFICENT + RC_ZERO_POINT
 
         #***********************************************************************
         #   Send immediately for good measure
         #***********************************************************************
+        self.pub_rc(self.next_rc)
 
     def start(self):
         """Starts execution of controller"""
@@ -1421,50 +1485,72 @@ class Controller:
         while not rospy.is_shutdown():
 
             #********************************************************************
-            #   Publish diagnostics periodically
-            #********************************************************************
-
-            #********************************************************************
             #   If target velocity (for manual mode) has gone stale, reset it
             #   to zero, so drone doesn't fly away
             #********************************************************************
+            if rospy.Time.now() - self.next_rc_timestamp > VELOCITY_TTL:
+                self.next_rc.channel = [RC_ZERO_POINT]*len(self.next_rc.channel)
+                self.next_rc_timestamp = rospy.Time.now()
 
             #********************************************************************
             #   If we're in manual mode, publish target velocity periodically
             #********************************************************************
+            if srv.SetMode.MANUAL == self.uav_mode:
+                self.pub_rc(self.next_rc)
+
+            #********************************************************************
+            #   Sleep until next RC message is due
+            #********************************************************************
+            VELOCITY_UPDATE_RATE.sleep()
 
 
 #*******************************************************************************
-#   Parse any arguments that follow the node command
-#*******************************************************************************
-from optparse import OptionParser
-
-parser = OptionParser("mosaic_node.py [options]")
-parser.add_option("-n", "--name", dest="name", default="parrot",
-    help="Name of the prefix for the mavros node")
-parser.add_option("-r", "--ros", action="store_true", dest="ros",
-    help="Use ROS parameter server", default=True)
-(opts, args) = parser.parse_args()
-
-#*******************************************************************************
-#   If the named UAV is active then run the node until we're interrupted
-#   Otherwise, bail out now --- we're not needed.
+#   Start ROS Control Node for all active drones
 #*******************************************************************************
 if __name__ == '__main__':
     try:
-        if not opts.ros or opts.name in rospy.get_param(ACTIVE_DRONE_NAMESPACE):
-            rospy.init_node("mavros_controller")
-            rospy.loginfo("[CONTROL %s] waiting for driver services" %
-                    opts.name)
-            rospy.wait_for_service("/" + opts.name + "/mav_command")
-            rospy.wait_for_service("/" + opts.name + "/set_waypoints")
-            rospy.wait_for_service("/" + opts.name + "/get_waypoints")
-            rospy.wait_for_service("/" + opts.name + "/set_params")
-            rospy.wait_for_service("/" + opts.name + "/get_params")
-            rospy.wait_for_service("/" + opts.name + "/set_mission")
-            rospy.loginfo("[CONTROL %s] initialising high-level control" %
-                    opts.name)
-            node = Controller(opts.name)
-            node.start()
+        #***********************************************************************
+        #   Register ROS Node
+        #***********************************************************************
+        rospy.init_node("mavros_controller")
+
+        #***********************************************************************
+        #   Retrieve list of active drones from ROS Parameter Server
+        #***********************************************************************
+        active_drones = rospy.get_param(ACTIVE_DRONE_NAMESPACE,[])
+        if 0 == len(active_drones):
+            rospy.logwarn("There are no active drones listed on the ROS"
+                " Parameter Server.")
+            rospy.loginfo("Please list active drones under %s on the ROS"
+                " Parameter Server." % ACTIVE_DRONE_NAMESPACE)
+            rospy.loginfo("%s will exit immediately." % rospy.get_name())
+            return
+
+        #***********************************************************************
+        #   Activate controller services for all active drones
+        #***********************************************************************
+        drone_threads = []
+        for drone in active_drones:
+            rospy.loginfo("Activating control for drone %s" % drone)
+            controller = Controller(drone)
+            t = threading.Thread(name="%s-%s" % (rospy.get_name(), drone),
+                target=controller.start)
+            t.setDaemon(True)  # daemon threads are killed on exit
+            t.start()
+            drone_threads.append(t)
+
+        #***********************************************************************
+        #   Wait for drone threads to die (they never should under normal
+        #   circumstances - so we will probably wait forever)
+        #***********************************************************************
+        for drone_controller in drone_threads:
+            drone_controller.join()
+            rospy.logwarn("%s is dead." % drone_controller.getName())
+        rospy.logwarn("All drone control threads have died unexpectedly.")
+
+    #***************************************************************************
+    #   Exit if we're interrupted
+    #***************************************************************************
     except rospy.ROSInterruptException:
-        pass
+        rospy.loginfo("%s exiting normally." % rospy.get_name())
+

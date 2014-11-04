@@ -57,6 +57,7 @@ add_message_files(
   Status.msg
   Velocity.msg
   Waypoint.msg
+  MapPoint.msg
 )
 
 ## Generate services in the 'srv' folder
@@ -69,6 +70,8 @@ add_service_files(
   GetWaypoints.srv
   SetWaypoints.srv
   AddWaypoints.srv
+  AddSweep.srv
+  AddSpiral.srv
   SetMode.srv
   SelectCamera.srv
   SimpleCommand.srv
