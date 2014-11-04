@@ -294,6 +294,7 @@ class Controller:
 
         if SUCCESS_ERR != response.status:
             self.__logerr("Failed to send parameters to drone")
+            self.__logdebug("Response is %s" % response.status)
             return response.status
 
         #**********************************************************************
@@ -308,7 +309,8 @@ class Controller:
             return SERVICE_CALL_FAILED_ERR
 
         if SUCCESS_ERR != response.status:
-            self.__logerr("Failed to send parameters to drone")
+            self.__logerr("Failed to get parameters to drone")
+            self.__logdebug("Response is %s" % response)
             return response.status
 
         #**********************************************************************
@@ -792,12 +794,12 @@ class Controller:
         #   Wait for mavros driver to initialise
         #***********************************************************************
         self.__loginfo("Waiting for driver services")
-        rospy.wait_for_service(self.control_prefix + "mav_command")
-        rospy.wait_for_service(self.control_prefix + "set_waypoints")
-        rospy.wait_for_service(self.control_prefix + "get_waypoints")
-        rospy.wait_for_service(self.control_prefix + "set_params")
-        rospy.wait_for_service(self.control_prefix + "get_params")
-        rospy.wait_for_service(self.control_prefix + "set_mission")
+        rospy.wait_for_service(self.driver_prefix + "mav_command")
+        rospy.wait_for_service(self.driver_prefix + "set_waypoints")
+        rospy.wait_for_service(self.driver_prefix + "get_waypoints")
+        rospy.wait_for_service(self.driver_prefix + "set_params")
+        rospy.wait_for_service(self.driver_prefix + "get_params")
+        rospy.wait_for_service(self.driver_prefix + "set_mission")
         self.__loginfo("Initialising high-level control")
 
         #**********************************************************************
@@ -867,14 +869,14 @@ class Controller:
         rospy.Subscriber(self.control_prefix + "manual_control", msg.Velocity,
             self.manual_control_cb)
 
-        rospy.Subscriber(MULTI_UAV_CONTROL_PREFIX + "takeoff", std_msgs.Empty,
+        rospy.Subscriber(MULTI_UAV_CONTROL_PREFIX + "takeoff", EmptyMsg,
             self.takeoff_cb)
 
-        rospy.Subscriber(MULTI_UAV_CONTROL_PREFIX + "land", std_msgs.Empty,
+        rospy.Subscriber(MULTI_UAV_CONTROL_PREFIX + "land", EmptyMsg,
             self.land_cb)
 
         rospy.Subscriber(MULTI_UAV_CONTROL_PREFIX + "emergency",
-            std_msgs.Empty, self.emergency_cb)
+            EmptyMsg, self.emergency_cb)
 
         rospy.Subscriber(MULTI_UAV_CONTROL_PREFIX + "set_origin", msg.Waypoint,
             self.set_origin_cb)

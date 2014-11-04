@@ -1461,4 +1461,4 @@ if __name__ == '__main__':
                         opts.minimum_altitude, opts.maximum_altitude)
             mav_proxy.start()
     except rospy.ROSInterruptException:
-        pass
+        rospy.loginfo("%s exiting normally." % rospy.get_name())
