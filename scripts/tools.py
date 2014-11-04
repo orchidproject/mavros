@@ -32,25 +32,25 @@ DIAG_OK    = diagnostic_msgs.msg.DiagnosticStatus.OK
 #******************************************************************************
 #   Convenience Error definitions for returning results from callbacks
 #******************************************************************************
-SUCCESS_ERR                  = Error(code=Error.SUCCESS)
-FAILURE_ERR                  = Error(code=Error.FAILURE)
-UNSUPPORTED_MODE_ERR         = Error(code=Error.UNSUPPORTED_MODE)
-UNSUPPORTED_FRAME_ERR        = Error(code=Error.UNSUPPORTED_FRAME)
-COORDS_OUT_OF_RANGE_ERR      = Error(code=Error.COORDS_OUT_OF_RANGE)
-MAV_TIMEOUT_ERR              = Error(code=Error.MAV_TIMEOUT)
-PARAM_NOT_SET_ERR            = Error(code=Error.PARAM_NOT_SET)
-BAD_PARAM_VALUE_ERR          = Error(code=Error.BAD_PARAM_VALUE)
-KEY_VALUE_COUNT_MISMATCH_ERR = Error(code=Error.KEY_VALUE_COUNT_MISMATCH)
-MAV_COMMAND_ERROR_ERR        = Error(code=Error.MAV_COMMAND_ERROR)
-UNSUPPORTED_COMMAND_ERR      = Error(code=Error.UNSUPPORTED_COMMAND)
-UNDEFINED_COMMAND_ERR        = Error(code=Error.UNDEFINED_COMMAND)
-INTERNAL_ERR                 = Error(code=Error.INTERNAL)
-UNDEFINED_WAYPOINT_ERR       = Error(code=Error.UNDEFINED_WAYPOINT)
+SUCCESS_ERR                  = Error.SUCCESS
+FAILURE_ERR                  = Error.FAILURE
+UNSUPPORTED_MODE_ERR         = Error.UNSUPPORTED_MODE
+UNSUPPORTED_FRAME_ERR        = Error.UNSUPPORTED_FRAME
+COORDS_OUT_OF_RANGE_ERR      = Error.COORDS_OUT_OF_RANGE
+MAV_TIMEOUT_ERR              = Error.MAV_TIMEOUT
+PARAM_NOT_SET_ERR            = Error.PARAM_NOT_SET
+BAD_PARAM_VALUE_ERR          = Error.BAD_PARAM_VALUE
+KEY_VALUE_COUNT_MISMATCH_ERR = Error.KEY_VALUE_COUNT_MISMATCH
+MAV_COMMAND_ERROR_ERR        = Error.MAV_COMMAND_ERROR
+UNSUPPORTED_COMMAND_ERR      = Error.UNSUPPORTED_COMMAND
+UNDEFINED_COMMAND_ERR        = Error.UNDEFINED_COMMAND
+INTERNAL_ERR                 = Error.INTERNAL
+UNDEFINED_WAYPOINT_ERR       = Error.UNDEFINED_WAYPOINT
 WAYPOINT_VERIFICATION_FAILURE_ERR = \
-    Error(code=Error.WAYPOINT_VERIFICATION_FAILURE)
-NO_GPS_FIX_ERR               = Error(code=Error.NO_GPS_FIX)
-SERVICE_CALL_FAILED_ERR      = Error(code=Error.SERVICE_CALL_FAILED)
-UNKNOWN_CAMERA_ERR           = Error(code=Error.UNKNOWN_CAMERA)
+    Error.WAYPOINT_VERIFICATION_FAILURE
+NO_GPS_FIX_ERR               = Error.NO_GPS_FIX
+SERVICE_CALL_FAILED_ERR      = Error.SERVICE_CALL_FAILED
+UNKNOWN_CAMERA_ERR           = Error.UNKNOWN_CAMERA
 
 #******************************************************************************
 #   Utility classes

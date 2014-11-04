@@ -6,4 +6,4 @@ float32 row_width   # distance in metres between sweep rows
 float32 wp_interval # distance in metres between waypoints on each row
 float32 altitude    # altitude at which to perform sweep
 ---
-Error status
+uint8 status

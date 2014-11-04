@@ -242,12 +242,12 @@ class MavRosProxy:
             result.status = KEY_VALUE_COUNT_MISMATCH_ERR
             return result
 
-        self.params = zip(req.keys, req.values)
+        self.params = dict(zip(req.keys, req.values))
 
         #**********************************************************************
         #   If we get this far, return SUCCESS
         #**********************************************************************
-        rospy.loginfo("Parameters set.")
+        rospy.loginfo("Parameters set to: %s" % self.params)
         result.status = SUCCESS_ERR
         return result
 

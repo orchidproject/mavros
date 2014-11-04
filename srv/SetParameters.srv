@@ -1,4 +1,4 @@
 string[] keys
 float32[] values
 ---
-Error status
+uint8 status

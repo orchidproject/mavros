@@ -5,4 +5,4 @@ uint8 UNKNOWN   = 0 # used to indicate that the current active camera is unknown
 uint8 FRONT     = 1 # use the front HD camera
 uint8 BOTTOM    = 2 # use the bottom SVGA camera
 ---
-Error status        # indicates success or failure of operation
+uint8 status        # indicates success or failure of operation

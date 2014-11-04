@@ -17,4 +17,4 @@ uint8 CMD_RESUME = 21
 uint8 CUSTOM_NO_OP = 0  # has no effect
 uint8 CUSTOM_ARDONE_EMERGENCY = 100  # emergency mode recognised by Parrot
 ---
-Error status
+uint8 status

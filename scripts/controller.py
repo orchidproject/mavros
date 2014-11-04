@@ -72,6 +72,9 @@ from tools import *
 #   Constants
 #*******************************************************************************
 
+# Tolerated difference between floats when testing for equality
+FLOAT_DIFF_TOLERANCE = 1.0e-10
+
 # prefix for things subscribed to by all UAV controllers
 MULTI_UAV_CONTROL_PREFIX = "/all/control/"
 
@@ -231,7 +234,7 @@ class Controller:
            Parameters
            msg - string to log
         """
-        rospy.logdebug(self.log_prefix + msg)
+        rospy.loginfo(self.log_prefix + msg)
 
     def __load_drone_params(self):
         """Loads drone parameters from ROS parameter server
@@ -304,8 +307,8 @@ class Controller:
             response = self.get_params_srv()
 
         except rospy.ServiceException as e:
-            self.__logerr("Exception occurred while sending parameters "
-                    "to drone %s" % e)
+            self.__logerr("Exception occurred while getting parameters "
+                    "from drone %s" % e)
             return SERVICE_CALL_FAILED_ERR
 
         if SUCCESS_ERR != response.status:
@@ -317,14 +320,26 @@ class Controller:
         #   Ensure that any key-value pairs already defined locally have been
         #   set correctly on drone
         #**********************************************************************
-        params_from_drone = zip(response.keys(),response.values())
+        params_from_drone = dict(zip(response.keys,response.values))
         for key,value in self.drone_params.iteritems():
+
+            # ensure parameter is defined on drone
             if not key in params_from_drone:
                 self.__logerr("Failed to set parameter %s on drone" % key)
-                return PARAM_NOT_SET
+                return PARAM_NOT_SET_ERR
+
+            # compare float values with some tolerance
+            elif type(params_from_drone[key]) is float:
+                value_err = abs(params_from_drone[key]-value)
+                if value_err > FLOAT_DIFF_TOLERANCE:
+                    self.__logerr("Parameter %s has intolerable float error "
+                            "of %g on drone." % (key, value_err) )
+                    return BAD_PARAM_VALUE_ERR
+
+            # compare anything else precisely
             elif value != params_from_drone[key]:
                 self.__logerr("Parameter %s has wrong value on drone." % key)
-                return BAD_PARAM_VALUE
+                return BAD_PARAM_VALUE_ERR
 
         #**********************************************************************
         #   If we're happy, then store any additional parameters stored on
@@ -721,7 +736,7 @@ class Controller:
         if self.uav_mode != srv.SetModeRequest.AUTO:
             self.__logerr("Can't execute mission on drone unless we know "
                     "its in AUTO mode. Please set mode explicitly first.")
-            return UNSUPPORTED_COMMAND
+            return UNSUPPORTED_COMMAND_ERR
 
         #**********************************************************************
         #   Try to set the current mission to the specified waypoint
@@ -766,7 +781,7 @@ class Controller:
         if self.uav_mode != srv.SetModeRequest.AUTO:
             self.__logwarn("Can't halt drone unless we know its in AUTO mode."
                     " Please set mode explicitly first.")
-            return UNSUPPORTED_COMMAND
+            return UNSUPPORTED_COMMAND_ERR
 
         #**********************************************************************
         #   Try to halt the drone and return result status
@@ -1009,7 +1024,7 @@ class Controller:
         status.summary(error_level, summary_string)
         return status
 
-    def update_diagnostics(self):
+    def update_diagnostics(self, event=None):
         """Used to periodically update ROS diagnostics"""
 
         self.diag_updater.update()
@@ -1519,7 +1534,7 @@ class Controller:
             if not self.__valid_waypoint(wp):
                 self.logerr("Cannot add waypoints because one or more "
                         " waypoints are invalid.")
-                return WAYPOINT_VERIFICATION_FAILURE
+                return WAYPOINT_VERIFICATION_FAILURE_ERR
 
         #***********************************************************************
         #   Add them to the queue
@@ -1615,7 +1630,7 @@ class Controller:
         #**********************************************************************
         #   Start diagnostics running
         #**********************************************************************
-        diag_timer = rospy.Timer(DIAG_UPDATE_FREQ,self.update_diagnostics)
+        diag_timer = rospy.Timer(DIAG_UPDATE_FREQ, self.update_diagnostics)
 
         #***********************************************************************
         #   Main loop - continue executing until we're interrupted

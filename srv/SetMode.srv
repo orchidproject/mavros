@@ -5,4 +5,4 @@ uint8 AUTO      = 1 # set control mode to AUTO (for waypoint following)
 uint8 MANUAL    = 2 # set control mode for direct control of velocity
 uint8 EMERGENCY = 3 # put UAV in emergency mode
 ---
-Error status
+uint8 status
