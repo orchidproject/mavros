@@ -1,4 +1,4 @@
 ---
 string[] keys
-float32[] values
+float64[] values
 uint8 status

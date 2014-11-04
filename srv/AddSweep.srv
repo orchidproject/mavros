@@ -2,8 +2,8 @@ float64 radius      # radius (in metres) in which reach waypoint before continui
 duration waitTime   # time to hold at each waypoint before continuing
 MapPoint start      # starting position for sweep
 MapPoint end        # end point for sweep
-float32 row_width   # distance in metres between sweep rows
-float32 wp_interval # distance in metres between waypoints on each row
-float32 altitude    # altitude at which to perform sweep
+float64 row_width   # distance in metres between sweep rows
+float64 wp_interval # distance in metres between waypoints on each row
+float64 altitude    # altitude at which to perform sweep
 ---
 uint8 status

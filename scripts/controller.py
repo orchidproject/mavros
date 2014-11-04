@@ -73,7 +73,7 @@ from tools import *
 #*******************************************************************************
 
 # Tolerated difference between floats when testing for equality
-FLOAT_DIFF_TOLERANCE = 1.0e-10
+FLOAT_DIFF_TOLERANCE = 1.0e-14
 
 # prefix for things subscribed to by all UAV controllers
 MULTI_UAV_CONTROL_PREFIX = "/all/control/"
