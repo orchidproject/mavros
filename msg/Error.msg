@@ -21,3 +21,4 @@ uint8 UNDEFINED_WAYPOINT = 13  # Attempt to set mission to undefined waypoint
 uint8 WAYPOINT_VERIFICATION_FAILURE = 14  # Failed to verify waypoints on drone
 uint8 NO_GPS_FIX = 15  # Can't complete operation because there is no GPS fix
 uint8 SERVICE_CALL_FAILED = 16  # Exception occurred while trying to call remote service
+uint8 UNKNOWN_CAMERA = 17  # Can't activate camera with unknown identity

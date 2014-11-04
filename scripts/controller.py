@@ -321,23 +321,56 @@ class Controller:
     def __current_position_safe(self):
         """Returns true if our current position is unsafe"""
 
+        cur_pos = self.current_position  # convenience handle for position
+
+        #**********************************************************************
+        #   Before we start, ensure that mandatory safety parameters are set
+        #   If they are not, we have a bug somewhere. They should always have
+        #   at least some default value
+        #**********************************************************************
+        if not MIN_WAYPOINT_ALTITUDE_PARAM in self.drone_params:
+            self.__logerr("Internal error - Min waypoint altitude not set.")
+            return False
+
+        if not MAX_WAYPOINT_ALTITUDE_PARAM in self.drone_params:
+            self.__logerr("Internal error - Max waypoint altitude not set.")
+            return False
+
+        if not SAFE_FLIGHT_ZONE_RADIUS_PARAM in self.drone_params:
+            self.__logerr("Internal error - safe flight radius not set.")
+            return False
+
         #**********************************************************************
         #   If position is unknown we assume its not safe
         #**********************************************************************
+        if cur_pos is None:
+            return False
 
         #**********************************************************************
         #   If position is all zeros, we can pretty sure we don't have a
         #   a GPS lock, so we'll assume this is unsafe
         #**********************************************************************
+        if 0.0 == cur_pos.latitude and 0.0 == cur_pos.longitude and \
+            0.0 == cur_pos.altitude:
+
+            return False
 
         #**********************************************************************
         #   If our altitude is outside allowable waypoint range by reasonable
         #   margin of error - that's unsafe
         #**********************************************************************
+        if self.drone_params[MIN_WAYPOINT_ALTITUDE_PARAM] > cur_pos.altitude:
+            return False
+
+        if self.drone_params[MAX_WAYPOINT_ALTITUDE_PARAM] < cur_pos.altitude:
+            return False
 
         #**********************************************************************
         #   If our position is too far from origin thats unsafe
         #**********************************************************************
+        dist_from_origin = total_distance(cur_pos,self.origin)
+        if self.drone_params[SAFE_FLIGHT_ZONE_RADIUS_PARAM] < dist_from_origin:
+            return False
 
         #**********************************************************************
         #   In all other cases, assume everything is ok
@@ -354,28 +387,82 @@ class Controller:
         """
 
         #**********************************************************************
+        #   Before we start, ensure that mandatory safety parameters are set
+        #   If they are not, we have a bug somewhere. They should always have
+        #   at least some default value
+        #**********************************************************************
+        if not MIN_WAYPOINT_ALTITUDE_PARAM in self.drone_params:
+            self.__logerr("Internal error - Min waypoint altitude not set.")
+            return False
+
+        if not MAX_WAYPOINT_ALTITUDE_PARAM in self.drone_params:
+            self.__logerr("Internal error - Max waypoint altitude not set.")
+            return False
+
+        if not SAFE_FLIGHT_ZONE_RADIUS_PARAM in self.drone_params:
+            self.__logerr("Internal error - safe flight radius not set.")
+            return False
+
+        #**********************************************************************
         #   Validate latitude and longitude for Global waypoints
         #**********************************************************************
+        if msg.Waypoint.FRAME_GLOBAL == waypoint.frame:
+            
+            # validate latitude (stored in coordinate x)
+            if MIN_VALID_LATITUDE > waypoint.x:
+                return False
+
+            if MAX_VALID_LATITUDE < waypoint.x:
+                return False
+
+            # validate longitude (stored in coordinate y)
+            if MIN_VALID_LONGITUDE > waypoint.y:
+                return False
+
+            if MAX_VALID_LONGITUDE < waypoint.y:
+                return False
 
         #**********************************************************************
         #   Only allow LOCAL waypoints if our origin is set
         #**********************************************************************
+        elif msg.Wayoint.FRAME_LOCAL == waypoint.frame:
+
+            if self.origin is None:
+                return False
 
         #**********************************************************************
         #   Disallow waypoints in any unsupported or undefined frame
         #**********************************************************************
+        else:
+            return False
 
         #**********************************************************************
-        #   Range check altitude
+        #   Range check altitude (stored in z coordinate)
         #**********************************************************************
+        if self.drone_params[MIN_WAYPOINT_ALTITUDE_PARAM] > waypoint.z:
+            return False
+
+        if self.drone_params[MAX_WAYPOINT_ALTITUDE_PARAM] < waypoint.z:
+            return False
 
         #**********************************************************************
         #   Ensure we're a safe distance from our current position
         #**********************************************************************
+        safe_distance = self.drone_params[SAFE_FLIGHT_ZONE_RADIUS_PARAM]
+        if safe_distance < total_distance(self.current_position,waypoint)
+            return False
 
         #**********************************************************************
         #   If possible, ensure we're a safe distance from our origin
         #**********************************************************************
+        if self.origin is not None:
+            if safe_distance < total_distance(self.origin,waypoint)
+                return False
+
+        #**********************************************************************
+        #   If we get this far, assume the waypoint is valid
+        #**********************************************************************
+        return True
 
     def __are_waypoints_equivalent(self,wp1,wp2,tol=1.0):
         """Compares two waypoints to see if they are equivalent.
@@ -482,6 +569,39 @@ class Controller:
         else:
             self.__logerr("Unrecognised waypoint frame %d" % wp.frame)
             return None
+
+    def __add_sweep_points(self,points,req)
+        """Utility function for adding sweep search points to the queue
+
+           Provides common implementation for sweep search callback functions.
+
+           Parameters
+           points - list of point pairs in form (eastings,northings) generated
+                    by one of the uav_utils sweep functions.
+           req - original sweep search request of type srv.AddSweepRequest
+        """
+
+        #**********************************************************************
+        #   Convert points into waypoint messages
+        #**********************************************************************
+        waypoints = []
+        for p in points:
+            wp = msg.Waypoint()
+            wp.frame = msg.Waypoint.FRAME_LOCAL
+            wp.autocontinue = True
+            wp.radius = req.radius
+            wp.waitTime = req.waitTime
+            wp.x = p[0]  # easting
+            wp.y = p[1]  # northing
+            wp.z = req.altitude
+            waypoints.append(wp)
+
+        #***********************************************************************
+        #   Delegate the rest to the the add waypoints callback
+        #***********************************************************************
+        request = srv.AddWaypointsRequest()
+        request.waypoints = waypoints
+        return add_waypoints_cb(request)
 
     def __set_waypoints_from_queue(self):
         """Syncs the waypoints on the drone with the currently queued waypoints
@@ -722,10 +842,10 @@ class Controller:
         rospy.Service(self.control_prefix + "add_sweep", srv.AddSweep,
             self.add_sweep_cb)
 
-        rospy.Service(self.control_prefix + "add_spiral_out", srv.AddSpiral,
+        rospy.Service(self.control_prefix + "add_spiral_out", srv.AddSweep,
             self.add_spiral_out_cb)
 
-        rospy.Service(self.control_prefix + "add_spiral_in", srv.AddSpiral,
+        rospy.Service(self.control_prefix + "add_spiral_in", srv.AddSweep,
             self.add_spiral_in_cb)
 
         #**********************************************************************
@@ -987,20 +1107,47 @@ class Controller:
            See service definition for details.
         """
         #***********************************************************************
+        #   Check to see if camera parameters are present. If not, we
+        #   may not be dealing with an AR.Drone
+        #***********************************************************************
+        if (USE_BOTTOM_CAMERA_PARAM not in self.drone_params) or \
+            (USE_FRONT_CAMERA_PARAM not in self.drone_params):
+
+            self.__logwarn("Can't select camera because camera parameters are"
+                    " not present. Perhaps UAV is not an AR.Drone?")
+            return UNSUPPORTED_COMMAND_ERR
+
+        #***********************************************************************
         #   Select front camera on request
         #***********************************************************************
+        if srv.SelectCamera.FRONT == req.camera:
+
+            self.drone_params[USE_BOTTOM_CAMERA_PARAM] = 0.0
+            self.drone_params[USE_FRONT_CAMERA_PARAM]  = 1.0
 
         #***********************************************************************
         #   Select bottom camera on request
         #***********************************************************************
+        if srv.SelectCamera.BOTTOM == req.camera:
+
+            self.drone_params[USE_BOTTOM_CAMERA_PARAM] = 1.0
+            self.drone_params[USE_FRONT_CAMERA_PARAM]  = 0.0
 
         #***********************************************************************
         #   Ignore requests for any unknown or undefined camera
         #***********************************************************************
+        else:
+            self.__logwarn("Ignoring request to switch to unknown camera %d" %
+                    req.camera)
+            return UNKNOWN_CAMERA_ERR
 
         #***********************************************************************
         #   Try to sync updated camera parameters with drone
         #***********************************************************************
+        status = self.__sync_params_with_drone()
+        if SUCCESS_ERR != status:
+            self.__logerr("Failed to sync camera parameters with drone.")
+            return status
 
     def set_mode_cb(self,req):
         """Callback for mavros/SetMode service
@@ -1380,48 +1527,24 @@ class Controller:
            Implements mavros/AddSweep ROS service.
            See service definition for details
         """
-
-        #***********************************************************************
-        #   Generate waypoints from specification
-        #***********************************************************************
-        waypoints = []
-
-        #***********************************************************************
-        #   Delegate the rest to the the add waypoints callback
-        #***********************************************************************
-        request = srv.AddWaypointsRequest()
-        request.waypoints = waypoints
-        return add_waypoints_cb(request)
+        start = [req.start.easting req.start.northing]
+        end = [req.start.easting req.start.northing]
+        points = rect_sweep(start, end, req.row_width, req.wp_interval)
+        return self.__add_sweep_points(points,req)
 
     def add_spiral_out_cb(self,req):
         """Callback for adding waypoints to spiral out"""
-
-        #***********************************************************************
-        #   Generate waypoints from specification
-        #***********************************************************************
-        waypoints = []
-
-        #***********************************************************************
-        #   Delegate the rest to the the add waypoints callback
-        #***********************************************************************
-        request = srv.AddWaypointsRequest()
-        request.waypoints = waypoints
-        return add_waypoints_cb(request)
+        start = [req.start.easting req.start.northing]
+        end = [req.start.easting req.start.northing]
+        points = spiral_sweep(start, end, req.row_width, req.wp_interval, False)
+        return self.__add_sweep_points(points,req)
 
     def add_spiral_in_cb(self,req):
         """Callback for adding waypoints to spiral in"""
-
-        #***********************************************************************
-        #   Generate waypoints from specification
-        #***********************************************************************
-        waypoints = []
-
-        #***********************************************************************
-        #   Delegate the rest to the the add waypoints callback
-        #***********************************************************************
-        request = srv.AddWaypointsRequest()
-        request.waypoints = waypoints
-        return add_waypoints_cb(request)
+        start = [req.start.easting req.start.northing]
+        end = [req.start.easting req.start.northing]
+        points = spiral_sweep(start, end, req.row_width, req.wp_interval, True)
+        return self.__add_sweep_points(points,req)
 
     def manual_control_cb(self,vel):
         """Callback for directly controlling drones velocity

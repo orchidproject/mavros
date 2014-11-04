@@ -71,7 +71,6 @@ add_service_files(
   SetWaypoints.srv
   AddWaypoints.srv
   AddSweep.srv
-  AddSpiral.srv
   SetMode.srv
   SelectCamera.srv
   SimpleCommand.srv

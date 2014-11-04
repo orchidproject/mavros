@@ -49,6 +49,7 @@ WAYPOINT_VERIFICATION_FAILURE_ERR = \
     Error(code=Error.WAYPOINT_VERIFICATION_FAILURE)
 NO_GPS_FIX_ERR               = Error(code.Error.NO_GPS_FIX)
 SERVICE_CALL_FAILED_ERR      = Error(code.Error.SERVICE_CALL_FAILED)
+UNKNOWN_CAMERA_ERR           = Error(code.Error.UNKNOWN_CAMERA)
 
 #******************************************************************************
 #   Utility classes
@@ -234,7 +235,16 @@ def distance_along_ground(wp1,wp2):
     """
 
     #**************************************************************************
-    #   Convert parameters if the are waypoint messages
+    #   Convert UTM coordinates to global coordinates
+    #**************************************************************************
+    if type(wp1) is UTMWaypoint:
+        wp1 = wp1.to_global_waypoint()
+
+    if type(wp2) is UTMWaypoint:
+        wp1 = wp1.to_global_waypoint()
+
+    #**************************************************************************
+    #   Convert parameters if they are waypoint messages
     #   Return None if they are not in GLOBAL frame
     #**************************************************************************
     if type(wp1) is msg.Waypoint:
