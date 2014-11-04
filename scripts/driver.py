@@ -204,7 +204,7 @@ class MavRosProxy:
                                        queue_size=10)
 
         self.pub_state = rospy.Publisher(self.uav_name + '/state',
-                                         mavros.msg.State, ueue_size=10)
+                                         mavros.msg.State, queue_size=10)
 
         self.pub_attitude = rospy.Publisher(self.uav_name + '/attitude',
                                             mavros.msg.Attitude, queue_size=10)
