@@ -1,0 +1,11 @@
+<launch>
+  <arg name="address" default="192.168.1.2" />
+  <arg name="file" default="$(find ar2mav)/drones.yaml"/>
+  
+  <rosparam file="$(arg file)" command="load" />
+  <rosparam file="$(find mavros)/drone_params.yaml" command="load" />
+  <node pkg="mavros" type="dummy_driver.py" name="driver" output="screen" args="-n Parrot -l $(arg address) -r" />
+  <node pkg="mavros" type="controller.py" name="controller" output="screen"/>
+  <node pkg="rqt_runtime_monitor" type="rqt_runtime_monitor" name="diag_monitor"/>
+
+</launch>
