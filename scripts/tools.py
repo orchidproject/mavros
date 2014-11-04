@@ -1,8 +1,9 @@
-"""Utility functions used by package python scripts
-"""
+#!/usr/bin/env python
+"""Utility functions used by package python scripts"""
 from utm import from_latlon, to_latlon
+import rospy
 import mavros.msg as msg
-import diagnostics_msgs
+import diagnostic_msgs
 from mavros.msg import Error
 from math import radians, cos, sin, asin, sqrt
 
@@ -47,9 +48,9 @@ INTERNAL_ERR                 = Error(code=Error.INTERNAL)
 UNDEFINED_WAYPOINT_ERR       = Error(code=Error.UNDEFINED_WAYPOINT)
 WAYPOINT_VERIFICATION_FAILURE_ERR = \
     Error(code=Error.WAYPOINT_VERIFICATION_FAILURE)
-NO_GPS_FIX_ERR               = Error(code.Error.NO_GPS_FIX)
-SERVICE_CALL_FAILED_ERR      = Error(code.Error.SERVICE_CALL_FAILED)
-UNKNOWN_CAMERA_ERR           = Error(code.Error.UNKNOWN_CAMERA)
+NO_GPS_FIX_ERR               = Error(code=Error.NO_GPS_FIX)
+SERVICE_CALL_FAILED_ERR      = Error(code=Error.SERVICE_CALL_FAILED)
+UNKNOWN_CAMERA_ERR           = Error(code=Error.UNKNOWN_CAMERA)
 
 #******************************************************************************
 #   Utility classes
@@ -59,18 +60,18 @@ class UTMWaypoint:
 
     def __init__(self, easting=0.0, northing=0.0, altitude=0.0,
         zone_number=None, zone_letter=None):
-    """Constructs new instance with specified parameters
+        """Constructs new instance with specified parameters
 
-       Parameters
-          easting - easting in metres from UTM zone origin [default: 0.0]
-          northing - northing in metres from UTM zone origin [default: 0.0]
-          zone_number - UTM zone number [default: None]
-          zone_letter - UTM zone letter [default: None]
-    """
-    self.easting = easting
-    self.northing = northing
-    self.zone_number = zone_number
-    self.zone_letter = zone_letter
+           Parameters
+              easting - easting in metres from UTM zone origin [default: 0.0]
+              northing - northing in metres from UTM zone origin [default: 0.0]
+              zone_number - UTM zone number [default: None]
+              zone_letter - UTM zone letter [default: None]
+        """
+        self.easting = easting
+        self.northing = northing
+        self.zone_number = zone_number
+        self.zone_letter = zone_letter
 
     def from_waypoint_message(cls,msg):
         """Constructs a new UTMWaypoint from a waypoint message
@@ -118,9 +119,9 @@ class UTMWaypoint:
         #**********************************************************************
         altitude = self.altitude  # altitude requires no conversion
         (latitude, longitude) = to_latlon(
-                self.easting
-                self.northing
-                self.zone_number
+                self.easting,
+                self.northing,
+                self.zone_number,
                 self.zone_letter
                 )
 
