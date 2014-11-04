@@ -56,6 +56,7 @@
 """
 import sys
 import threading
+from optparse import OptionParser
 from copy import deepcopy
 from utm import from_latlon, to_latlon
 import rospy
@@ -1641,48 +1642,43 @@ class Controller:
 
 
 #*******************************************************************************
-#   Start ROS Control Node for all active drones
+#   Main Program
 #*******************************************************************************
 if __name__ == '__main__':
+
+    #**************************************************************************
+    # Parse any arguments that follow the node command
+    # In particular, we need the name of the UAV to control
+    #**************************************************************************
+    parser = OptionParser("mavros.py [options]")
+    parser.add_option("-n", "--name", dest="name", default="Parrot",
+                              help="Name of UAV to control")
+    (opts, args) = parser.parse_args()
+
     try:
         #***********************************************************************
         #   Register ROS Node
         #***********************************************************************
-        rospy.init_node("controller")
+        drone = opts.name  # name of drone to control
+        rospy.init_node("%s-controller" % drone)
 
         #***********************************************************************
-        #   Retrieve list of active drones from ROS Parameter Server
+        #   If our drone is not listed as active on the ROS Parameter server
+        #   then bail out now.
         #***********************************************************************
         active_drones = rospy.get_param(ACTIVE_DRONE_NAMESPACE,[])
-        if 0 == len(active_drones):
-            rospy.logwarn("There are no active drones listed on the ROS"
-                " Parameter Server.")
-            rospy.loginfo("Please list active drones under %s on the ROS"
-                " Parameter Server." % ACTIVE_DRONE_NAMESPACE)
-            rospy.loginfo("%s will exit immediately." % rospy.get_name())
+        if drone not in active_drones:
+            rospy.loginfo("Drone %s is not listed as active. %s will not "
+                    " be launched." % (drone, rospy.get_name()) )
             sys.exit()
+        else:
+            rospy.loginfo("Activating controller for drone %s" % drone)
 
         #***********************************************************************
-        #   Activate controller services for all active drones
+        #   Activate controller services for our drone
         #***********************************************************************
-        drone_threads = []
-        for drone in active_drones:
-            rospy.loginfo("Activating control for drone %s" % drone)
-            controller = Controller(drone)
-            t = threading.Thread(name="%s-%s" % (rospy.get_name(), drone),
-                target=controller.start)
-            t.setDaemon(True)  # daemon threads are killed on exit
-            t.start()
-            drone_threads.append(t)
-
-        #***********************************************************************
-        #   Wait for drone threads to die (they never should under normal
-        #   circumstances - so we will probably wait forever)
-        #***********************************************************************
-        for drone_controller in drone_threads:
-            drone_controller.join()
-            rospy.logwarn("%s is dead." % drone_controller.getName())
-        rospy.logwarn("All drone control threads have died unexpectedly.")
+        controller = Controller(drone)
+        controller.start()
 
     #***************************************************************************
     #   Exit if we're interrupted
