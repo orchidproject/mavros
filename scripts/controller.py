@@ -54,6 +54,7 @@
     /all/control/set_origin - tell all UAVs to set specified GPS waypoint as
         origin for local coordinate frame.
 """
+import sys
 import threading
 from copy import deepcopy
 import rospy
@@ -307,7 +308,7 @@ class Controller:
             if not key in params_from_drone:
                 self.__logerr("Failed to set parameter %s on drone" % key)
                 return PARAM_NOT_SET
-            elif value != params_from_drone[key]
+            elif value != params_from_drone[key]:
                 self.__logerr("Parameter %s has wrong value on drone." % key)
                 return BAD_PARAM_VALUE
 
@@ -449,14 +450,14 @@ class Controller:
         #   Ensure we're a safe distance from our current position
         #**********************************************************************
         safe_distance = self.drone_params[SAFE_FLIGHT_ZONE_RADIUS_PARAM]
-        if safe_distance < total_distance(self.current_position,waypoint)
+        if safe_distance < total_distance(self.current_position,waypoint):
             return False
 
         #**********************************************************************
         #   If possible, ensure we're a safe distance from our origin
         #**********************************************************************
         if self.origin is not None:
-            if safe_distance < total_distance(self.origin,waypoint)
+            if safe_distance < total_distance(self.origin,waypoint):
                 return False
 
         #**********************************************************************
@@ -570,7 +571,7 @@ class Controller:
             self.__logerr("Unrecognised waypoint frame %d" % wp.frame)
             return None
 
-    def __add_sweep_points(self,points,req)
+    def __add_sweep_points(self,points,req):
         """Utility function for adding sweep search points to the queue
 
            Provides common implementation for sweep search callback functions.
@@ -613,7 +614,7 @@ class Controller:
         #   waypoints, so as a precaution, tell it to stop what its doing
         #   before sending waypoints.
         #**********************************************************************
-        if self.uav_mode == srv.SetMode.AUTO
+        if self.uav_mode == srv.SetMode.AUTO:
             halt_response = self.__halt_drone()
             if SUCCESS_ERR != halt_response:
                 self.__logerr("Failed to halt drone before sending "
@@ -1516,7 +1517,7 @@ class Controller:
         #   Otherwise, they'll be synced when we next resume the queue in 
         #   AUTO mode.
         #***********************************************************************
-        status = self.__set_waypoints_from_queue():
+        status = self.__set_waypoints_from_queue()
         if SUCCESS_ERR != status:
             self.logerr("Failed to add and sync waypoints with drone")
 
@@ -1527,22 +1528,22 @@ class Controller:
            Implements mavros/AddSweep ROS service.
            See service definition for details
         """
-        start = [req.start.easting req.start.northing]
-        end = [req.start.easting req.start.northing]
+        start = [req.start.easting, req.start.northing]
+        end = [req.start.easting, req.start.northing]
         points = rect_sweep(start, end, req.row_width, req.wp_interval)
         return self.__add_sweep_points(points,req)
 
     def add_spiral_out_cb(self,req):
         """Callback for adding waypoints to spiral out"""
-        start = [req.start.easting req.start.northing]
-        end = [req.start.easting req.start.northing]
+        start = [req.start.easting, req.start.northing]
+        end = [req.start.easting, req.start.northing]
         points = spiral_sweep(start, end, req.row_width, req.wp_interval, False)
         return self.__add_sweep_points(points,req)
 
     def add_spiral_in_cb(self,req):
         """Callback for adding waypoints to spiral in"""
-        start = [req.start.easting req.start.northing]
-        end = [req.start.easting req.start.northing]
+        start = [req.start.easting, req.start.northing]
+        end = [req.start.easting, req.start.northing]
         points = spiral_sweep(start, end, req.row_width, req.wp_interval, True)
         return self.__add_sweep_points(points,req)
 
@@ -1647,7 +1648,7 @@ if __name__ == '__main__':
             rospy.loginfo("Please list active drones under %s on the ROS"
                 " Parameter Server." % ACTIVE_DRONE_NAMESPACE)
             rospy.loginfo("%s will exit immediately." % rospy.get_name())
-            return
+            sys.exit()
 
         #***********************************************************************
         #   Activate controller services for all active drones
