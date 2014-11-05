@@ -398,9 +398,14 @@ class Controller:
         #**********************************************************************
         #   If our position is too far from origin thats unsafe
         #**********************************************************************
-        dist_from_origin = total_distance(cur_pos,self.origin)
-        if self.drone_params[SAFE_FLIGHT_ZONE_RADIUS_PARAM] < dist_from_origin:
-            return False
+        if self.origin is not None:
+
+            dist_from_origin = total_distance(cur_pos,self.origin)
+
+            if self.drone_params[SAFE_FLIGHT_ZONE_RADIUS_PARAM] < \
+                dist_from_origin:
+
+                return False
 
         #**********************************************************************
         #   In all other cases, assume everything is ok
@@ -652,7 +657,7 @@ class Controller:
         else:
             self.__logerr("Can't send waypoints unless drone is in AUTO"
                     " mode. Please set mode to AUTO.")
-            return
+            return UNSUPPORTED_COMMAND_ERR
 
         #**********************************************************************
         #   Get a copy of all waypoints in the queue without removing them.
@@ -759,14 +764,14 @@ class Controller:
         cmdRequest.command = srv.MAVCommandRequest.CMD_RESUME
         cmdRequest.custom = srv.MAVCommandRequest.CUSTOM_NO_OP
         try:
-            response = self.mav_command_srv(request)
+            response = self.mav_command_srv(cmdRequest)
             if SUCCESS_ERR != response.status:
                 self.__logerr("Could not start waypoint following on drone")
             return response.status
 
         except rospy.ServiceException as e:
             self.__logerr("MAVCommand service threw exception while trying to"
-                    "resume waypoint execution: %s" % e)
+                    " resume waypoint execution: %s" % e)
             return SERVICE_CALL_FAILED_ERR
             
     def __halt_drone(self):
@@ -794,12 +799,12 @@ class Controller:
             if SUCCESS_ERR != response.status:
                 self.__logerr("Could not halt drone")
             else:
-                self.__loginf("Halted drone.")
+                self.__loginfo("Halted drone.")
             return response.status
 
         except rospy.ServiceException as e:
             self.__logerr("MAVCommand service threw exception while trying to"
-                    "halt drone: %s" % e)
+                    " halt drone: %s" % e)
             return SERVICE_CALL_FAILED_ERR
 
     def __ros_init(self):
@@ -947,6 +952,16 @@ class Controller:
 
         status.add("Origin set", origin_status)
 
+        if is_origin_set:
+            global_origin = self.origin.to_global_waypoint()
+            status.add("origin latitude",global_origin.latitude)
+            status.add("origin longitude",global_origin.longitude)
+            status.add("origin altitude",global_origin.altitude)
+        else:
+            status.add("origin latitude",None)
+            status.add("origin longitude",None)
+            status.add("origin altitude",None)
+
         #**********************************************************************
         #   Calculate diagnostics about current position
         #**********************************************************************
@@ -967,6 +982,15 @@ class Controller:
 
         status.add("Position status", pos_status)
 
+        if is_pos_set:
+            status.add("current latitude",self.current_position.latitude)
+            status.add("current longitude",self.current_position.longitude)
+            status.add("current altitude",self.current_position.altitude)
+        else:
+            status.add("current latitude",None)
+            status.add("current longitude",None)
+            status.add("current altitude",None)
+
         #**********************************************************************
         #   If possible, calculate distance from origin
         #**********************************************************************
@@ -982,7 +1006,7 @@ class Controller:
         #   Give a warning if we're outside safe flight zone
         #**********************************************************************
         if not self.__current_position_safe():
-            summary_string = summary_string + "UNSAFE POSITION"
+            summary_string = summary_string + "UNSAFE POSITION. "
             error_level = max(error_level,DIAG_WARN)
 
         #**********************************************************************
@@ -993,17 +1017,19 @@ class Controller:
             summary_string = summary_string + "UAV mode unknown. "
             error_level = max(error_level,DIAG_WARN)
 
-        if srv.SetModeRequest.AUTO == self.uav_mode:
+        elif srv.SetModeRequest.AUTO == self.uav_mode:
             mode_status = "AUTO"
             summary_string = summary_string + "UAV in AUTO. "
 
-        if srv.SetModeRequest.MANUAL == self.uav_mode:
+        elif srv.SetModeRequest.MANUAL == self.uav_mode:
             mode_status = "MANUAL"
             summary_string = summary_string + "UAV in MANUAL. "
-        if srv.SetModeRequest.EMERGENCY == self.uav_mode:
+
+        elif srv.SetModeRequest.EMERGENCY == self.uav_mode:
             mode_status = "EMERGENCY"
             summary_string = summary_string + "UAV in EMERGENCY! "
             error_level = max(error_level,DIAG_WARN)
+
         else:
             summary_string = summary_string + "UAV mode undefined! "
             error_level = max(error_level,DIAG_ERROR)
@@ -1158,7 +1184,7 @@ class Controller:
         #***********************************************************************
         #   Select bottom camera on request
         #***********************************************************************
-        if srv.SelectCameraRequest.BOTTOM == req.camera:
+        elif srv.SelectCameraRequest.BOTTOM == req.camera:
 
             self.drone_params[USE_BOTTOM_CAMERA_PARAM] = 1.0
             self.drone_params[USE_FRONT_CAMERA_PARAM]  = 0.0
@@ -1177,7 +1203,7 @@ class Controller:
         status = self.__sync_params_with_drone()
         if SUCCESS_ERR != status:
             self.__logerr("Failed to sync camera parameters with drone.")
-            return status
+        return status
 
     def set_mode_cb(self,req):
         """Callback for mavros/SetMode service
@@ -1219,7 +1245,7 @@ class Controller:
 
             # Construct request
             request = srv.MAVCommandRequest()
-            request.mode = srv.MAVCommandRequest.CMD_MANUAL
+            request.command = srv.MAVCommandRequest.CMD_MANUAL
             request.custom = srv.MAVCommandRequest.CUSTOM_NO_OP
 
             # try to send request
@@ -1227,12 +1253,12 @@ class Controller:
                 response = self.mav_command_srv(request)
             except rospy.ServiceException as e:
                 self.__logerr("MAVCommand service threw exception while trying"
-                    "to set mode to MANUAL: %s" % e)
+                    " to set mode to MANUAL: %s" % e)
                 return SERVICE_CALL_FAILED_ERR
 
             # if we get that far, return error status from driver
             if SUCCESS_ERR == response.status:
-                self.uav_mode == srv.SetModeRequest.MANUAL
+                self.uav_mode = srv.SetModeRequest.MANUAL
             else:
                 self.__logerr("Drone failed to enter manual mode")
             return response.status
@@ -1242,18 +1268,18 @@ class Controller:
         #***********************************************************************
         if req.mode == srv.SetModeRequest.AUTO:
             request = srv.MAVCommandRequest()
-            request.mode = srv.MAVCommandRequest.CMD_AUTO
+            request.command = srv.MAVCommandRequest.CMD_AUTO
             request.custom = srv.MAVCommandRequest.CUSTOM_NO_OP
 
             try:
                 response = self.mav_command_srv(request)
             except rospy.ServiceException as e:
                 self.__logerr("MAVCommand service threw exception while trying"
-                    "to set mode to AUTO: %s" % e)
+                    " to set mode to AUTO: %s" % e)
                 return SERVICE_CALL_FAILED_ERR
 
             if SUCCESS_ERR == response.status:
-                self.uav_mode == srv.SetMode.AUTO
+                self.uav_mode = srv.SetModeRequest.AUTO
             else:
                 self.__logerr("Drone failed to enter auto mode")
             return response.status
@@ -1304,7 +1330,8 @@ class Controller:
         #   callback on this topic.
         #***********************************************************************
         msg = pos.to_waypoint_message()
-        self.pub_origin(msg)
+        self.__logdebug("Sending new origin: %s" % msg)
+        self.pub_origin.publish(msg)
         return SUCCESS_ERR
 
     def set_origin_cb(self,origin_wp):
@@ -1364,7 +1391,7 @@ class Controller:
             status = response.status
         except rospy.ServiceException as e:
             self.__logerr("MAVCommand service threw exception while trying"
-                "to clear waypoints: %s" % e)
+                " to clear waypoints: %s" % e)
             status = SERVICE_CALL_FAILED_ERR
 
         if SUCCESS_ERR != status:
@@ -1418,14 +1445,14 @@ class Controller:
         #***********************************************************************
         #   Only really meaningful to resume queue if drone is in AUTO mode
         #***********************************************************************
-        if srv.SetModeRequest.AUTO == self.uav_mode:
+        if srv.SetModeRequest.AUTO != self.uav_mode:
             self.__logwarn("Can only resume queue while drone is in AUTO mode")
             return UNSUPPORTED_COMMAND_ERR
 
         #***********************************************************************
         #   To be safe, resync waypoints on drone from queue
         #***********************************************************************
-        status = self.set_waypoints_from_queue()
+        status = self.__set_waypoints_from_queue()
         if SUCCESS_ERR != status:
             self.__logerr("Waypoints could not be synced with drone.")
             return status
@@ -1440,7 +1467,7 @@ class Controller:
         status = self.__execute_mission_on_drone(next_wp)
         if SUCCESS_ERR != status:
             self.queue_is_paused = True
-            Self.__logerr("Could not execute mission on drone. Pausing Queue.")
+            self.__logerr("Could not execute mission on drone. Pausing Queue.")
         return status
 
     def land_cb(self,req=None):
@@ -1453,14 +1480,14 @@ class Controller:
            mavros/Error message indicating if the command was sent successfully
         """
         request = srv.MAVCommandRequest()
-        request.mode = srv.MAVCommandRequest.CMD_LAND
+        request.command = srv.MAVCommandRequest.CMD_LAND
         request.custom = srv.MAVCommandRequest.CUSTOM_NO_OP
 
         try:
             response = self.mav_command_srv(request)
         except rospy.ServiceException as e:
             self.__logerr("MAVCommand service threw exception while trying"
-                "to land drone: %s" % e)
+                " to land drone: %s" % e)
             return SERVICE_CALL_FAILED_ERR
 
         if SUCCESS_ERR != response.status:
@@ -1479,14 +1506,14 @@ class Controller:
            mavros/Error message indicating if the command was sent successfully
         """
         request = srv.MAVCommandRequest()
-        request.mode = srv.MAVCommandRequest.CMD_TAKEOFF
+        request.command = srv.MAVCommandRequest.CMD_TAKEOFF
         request.custom = srv.MAVCommandRequest.CUSTOM_NO_OP
 
         try:
             response = self.mav_command_srv(request)
         except rospy.ServiceException as e:
             self.__logerr("MAVCommand service threw exception while trying"
-                "to take-off: %s" % e)
+                " to take-off: %s" % e)
             return SERVICE_CALL_FAILED_ERR
 
         if SUCCESS_ERR != response.status:
@@ -1505,19 +1532,19 @@ class Controller:
            mavros/Error message indicating if the command was sent successfully
         """
         request = srv.MAVCommandRequest()
-        request.mode = srv.MAVCommandRequest.CMD_CUSTOM_MODE
+        request.command = srv.MAVCommandRequest.CMD_CUSTOM_MODE
         request.custom = srv.MAVCommandRequest.CUSTOM_ARDONE_EMERGENCY
 
         try:
             response = self.mav_command_srv(request)
         except rospy.ServiceException as e:
             self.__logerr("MAVCommand service threw exception while trying"
-                "to enter EMERGENCY mode: %s" % e)
+                " to enter EMERGENCY mode: %s" % e)
             return SERVICE_CALL_FAILED_ERR
 
         if SUCCESS_ERR == response.status:
-            self.uav_mode == srv.SetMode.EMERGENCY
-            self.__logerr("Drone now in emergency mode.")
+            self.uav_mode = srv.SetModeRequest.EMERGENCY
+            self.__logwarn("Drone now in emergency mode.")
         else:
             self.__logerr("Drone failed to enter emergency mode")
 
@@ -1602,7 +1629,7 @@ class Controller:
         #***********************************************************************
         #   Send immediately for good measure
         #***********************************************************************
-        self.pub_rc(self.next_rc)
+        self.pub_rc.publish(self.next_rc)
 
     def start(self):
         """Starts execution of controller"""
@@ -1656,7 +1683,7 @@ class Controller:
             #   If we're in manual mode, publish target velocity periodically
             #********************************************************************
             if srv.SetModeRequest.MANUAL == self.uav_mode:
-                self.pub_rc(self.next_rc)
+                self.pub_rc.publish(self.next_rc)
 
             #********************************************************************
             #   Sleep until next RC message is due

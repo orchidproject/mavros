@@ -266,172 +266,70 @@ class MavRosProxy:
         #   Execute Takeoff
         #**********************************************************************
         if req.command == mavros.srv.CommandRequest.CMD_TAKEOFF:
-            if "LAND" not in self.connection.mode_mapping().keys():
-                rospy.logwarn("[MAVROS:%s]This vehicle can not fly." %
-                              self.uav_name)
-                return UNSUPPORTED_COMMAND_ERR
-            if self.state.custom_mode != self.connection.mode_mapping()["LAND"]:
-                rospy.loginfo("[MAVROS:%s]Already in TAKEOFF" % self.uav_name)
-                return SUCCESS_ERR
-
-            self.connection.mav.command_long_send(self.connection.target_system,
-                                                  0, mav.MAV_CMD_NAV_TAKEOFF,
-                                                  0, 0, 0, 0, 0, 0, 0, 0)
-
-            rospy.sleep(BUSY_WAIT_INTERVAL)
-            while self.state.custom_mode == \
-                  self.connection.mode_mapping()["LAND"]:
-                if rospy.Time.now() - start_time > self.command_timeout:
-                    rospy.logerr(
-                        "[MAVROS:%s]Timeout while trying to takeoff..." %
-                        self.uav_name + str(self.state.custom_mode))
-                    return MAV_TIMEOUT_ERR
-                rospy.sleep(BUSY_WAIT_INTERVAL)
-            rospy.loginfo("[MAVROS:%s]Taken off" % self.uav_name)
+            rospy.loginfo("[MAVROS:%s]Takeoff" % self.uav_name)
             return SUCCESS_ERR
 
         #**********************************************************************
         #   Execute Land
         #**********************************************************************
         elif req.command == mavros.srv.CommandRequest.CMD_LAND:
-            if "LAND" not in self.connection.mode_mapping().keys():
-                rospy.logwarn("[MAVROS:%s]This vehicle can not fly." %
-                              self.uav_name)
-                return UNSUPPORTED_COMMAND_ERR
-            if self.state.custom_mode == self.connection.mode_mapping()["LAND"]:
-                rospy.loginfo("[MAVROS:%s]Already in LANDED" % self.uav_name)
-                return SUCCESS_ERR
-            self.connection.mav.command_long_send(self.connection.target_system,
-                                                  0, mav.MAV_CMD_NAV_LAND,
-                                                  0, 0, 0, 0, 0, 0, 0, 0)
-            rospy.sleep(BUSY_WAIT_INTERVAL)
-            while self.state.custom_mode != \
-                  self.connection.mode_mapping()["LAND"]:
-                if rospy.Time.now() - start_time > self.command_timeout:
-                    rospy.logwarn(
-                        "[MAVROS:%s]Timeout while trying to land..." %
-                        self.uav_name + str(self.state.custom_mode))
-                    return MAV_TIMEOUT_ERR
-                rospy.sleep(BUSY_WAIT_INTERVAL)
-            rospy.loginfo("[MAVROS:%s]Landed" % self.uav_name)
+            rospy.loginfo("[MAVROS:%s]Landing" % self.uav_name)
             return SUCCESS_ERR
 
         #**********************************************************************
         #   Halt at current position
         #**********************************************************************
         elif req.command == mavros.srv.CommandRequest.CMD_HALT:
-            # self.connection.mav.mission_set_current_send(
-            #   self.connection.target_system,
-            #   self.connection.target_component, 0)
-            self.connection.mav.command_long_send(self.connection.target_system,
-                                          0, mav.MAV_CMD_OVERRIDE_GOTO,
-                                          1, mav.MAV_GOTO_DO_HOLD,
-                                          mav.MAV_GOTO_HOLD_AT_CURRENT_POSITION,
-                                          mav.MAV_FRAME_GLOBAL_RELATIVE_ALT,
-                                          0, 0, 0, 0)
+            rospy.loginfo("[MAVROS:%s]Halting" % self.uav_name)
             return SUCCESS_ERR
 
         #**********************************************************************
         #   Resume waypoints after halt
         #**********************************************************************
         elif req.command == mavros.srv.CommandRequest.CMD_RESUME:
-            self.connection.mav.command_long_send(self.connection.target_system,
-                                        0,
-                                        mav.MAV_CMD_OVERRIDE_GOTO,
-                                        1, mav.MAV_GOTO_DO_CONTINUE,
-                                        mav.MAV_GOTO_HOLD_AT_CURRENT_POSITION,
-                                        mav.MAV_FRAME_GLOBAL_RELATIVE_ALT,
-                                        0, 0, 0, 0)
+            rospy.loginfo("[MAVROS:%s]Resuming" % self.uav_name)
             return SUCCESS_ERR
 
         #**********************************************************************
         #   Execute custom command
         #**********************************************************************
         elif req.command == mavros.srv.CommandRequest.CMD_COMMAND:
-            self.connection.mav.command_long_send(self.connection.target_system,
-                                         self.connection.target_component,
-                                         req.custom, 1, 0, 0, 0, 0, 0, 0, 0)
+            rospy.loginfo("[MAVROS:%s]Executing command" % self.uav_name)
             return SUCCESS_ERR
 
         #**********************************************************************
         #   Change mode to manual
         #**********************************************************************
         elif req.command == mavros.srv.CommandRequest.CMD_MANUAL:
-            if "MANUAL" not in self.connection.mode_mapping().keys():
-                rospy.logwarn(
-                    "[MAVROS:%s]This vehicle might not support manual" %
-                    self.uav_name + str(ADHOC_MANUAL))
-                mode = ADHOC_MANUAL
-            else:
-                mode = self.connection.mode_mapping()["MANUAL"]
-            if self.state.custom_mode == mode:
-                rospy.loginfo("[MAVROS:%s]Already in MANUAL" % self.uav_name)
-                return SUCCESS_ERR
-            self.connection.mav.set_mode_send(self.connection.target_system,
-                                         mav.MAV_MODE_FLAG_CUSTOM_MODE_ENABLED,
-                                         mode)
-            rospy.sleep(BUSY_WAIT_INTERVAL)
-            while self.state.custom_mode != mode:
-                if rospy.Time.now() - start_time > self.command_timeout:
-                    rospy.loginfo("[MAVROS:%s]Timeout while going to MANUAL" %
-                                  self.uav_name)
-                    return MAV_TIMEOUT_ERR
-                rospy.sleep(BUSY_WAIT_INTERVAL)
-            rospy.loginfo("[MAVROS:%s]Switched to MANUAL" % self.uav_name)
+            rospy.loginfo("[MAVROS:%s]Now in manual" % self.uav_name)
             return SUCCESS_ERR
 
         #**********************************************************************
         #   Change mode to auto
         #**********************************************************************
         elif req.command == mavros.srv.CommandRequest.CMD_AUTO:
-            if "AUTO" not in self.connection.mode_mapping().keys():
-                rospy.loginfo("[MAVROS:%s]This vehicle does not have auto."
-                              " Sending mission start..." % self.uav_name)
-                self.connection.set_mode_auto()
-                return SUCCESS_ERR
-            if self.state.custom_mode == self.connection.mode_mapping()["AUTO"]:
-                rospy.loginfo("[MAVROS:%s]Already in AUTO" % self.uav_name)
-                return SUCCESS_ERR
-            self.connection.mav.set_mode_send(self.connection.target_system,
-                                        mav.MAV_MODE_FLAG_CUSTOM_MODE_ENABLED,
-                                        self.connection.mode_mapping()["AUTO"])
-            rospy.sleep(BUSY_WAIT_INTERVAL)
-            while self.state.custom_mode != \
-                  self.connection.mode_mapping()["AUTO"]:
-                if rospy.Time.now() - start_time > self.command_timeout:
-                    rospy.logwarn("[MAVROS:%s]Timeout while going to AUTO..." %
-                                  self.uav_name)
-                    return MAV_TIMEOUT_ERR
-                rospy.sleep(BUSY_WAIT_INTERVAL)
-            rospy.loginfo("[MAVROS:%s]Switched to AUTO" % self.uav_name)
+            rospy.loginfo("[MAVROS:%s]Now in auto" % self.uav_name)
             return SUCCESS_ERR
 
         #**********************************************************************
         #   Change base mode
         #**********************************************************************
         elif req.command == mavros.srv.CommandRequest.CMD_BASE_MODE:
-            self.connection.mav.set_mode_send(self.connection.target_system,
-                                              req.custom, 0)
-            rospy.loginfo("[MAVROS:%s]Base mode(%s)..." %
-                          (self.uav_name, req.custom) )
+            rospy.loginfo("[MAVROS:%s] changed base mode" % self.uav_name)
             return SUCCESS_ERR
 
         #**********************************************************************
         #   Change custom mode
         #**********************************************************************
         elif req.command == mavros.srv.CommandRequest.CMD_CUSTOM_MODE:
-            self.connection.mav.set_mode_send(self.connection.target_system,
-                                         mav.MAV_MODE_FLAG_CUSTOM_MODE_ENABLED,
-                                         req.custom)
-            rospy.loginfo("[MAVROS:%s]Custom mode(%s)..." %
-                          (self.uav_name, req.custom))
+            rospy.loginfo("[MAVROS:%s] changed custom mode" % self.uav_name)
             return SUCCESS_ERR
 
         #**********************************************************************
         #   Clear waypoints
         #**********************************************************************
         elif req.command == mavros.srv.CommandRequest.CMD_CLEAR_WAYPOINTS:
-            return clear_waypoints_cmd(self)
+            return self.clear_waypoints_cmd()
 
         #**********************************************************************
         #   Return error if we get an undefined command
@@ -444,42 +342,6 @@ class MavRosProxy:
         #**********************************************************************
         return INTERNAL_ERR
 
-    def wait_for_wp_ack(self,from_time):
-        """Wait for MAV to acknowledge transmission of all waypoints
-
-           Parameters:
-           from_time - type: rospy.Time
-                       Time acknowledgement is sent must be after this time
-                       to be counted.
-
-           Returns: mavros/Error.msg object indicating error or success.
-        """
-
-        #**********************************************************************
-        #   Wait for mission acknowledgement
-        #**********************************************************************
-        while self.last_wp_ack_time < from_time:
-            rospy.sleep(BUSY_WAIT_INTERVAL)
-            if rospy.Time.now() - from_time > self.command_timeout:
-                rospy.logerr("[MAVROS:%s]Timeout while updating waypoints..." %
-                              self.uav_name)
-                return MAV_TIMEOUT_ERR
-
-        #**********************************************************************
-        #   Check that acknowledgement reported success
-        #**********************************************************************
-        if self.last_wp_ack_result != mav.MAV_MISSION_ACCEPTED:
-            rospy.logerr("[MAVROS:%s]Failed to update waypoints[%d]" %
-                          (self.uav_name, self.last_wp_ack_result))
-            return MAV_COMMAND_ERROR_ERR
-
-        #**********************************************************************
-        #   If we get this far, return success
-        #**********************************************************************
-        rospy.loginfo("[MAVROS:%s] Waypoints updated successfully" %
-                      self.uav_name)
-        return SUCCESS_ERR
-
     def clear_waypoints_cmd(self):
         """Executes a clear waypoints command on MAV"""
 
@@ -488,23 +350,7 @@ class MavRosProxy:
         #**********************************************************************
         rospy.loginfo("[MAVROS:%s]Clearing waypoints on MAV" % self.uav_name)
         self.current_waypoints = []
-        self.waypoints_synced_with_mav = []
-           
-        #**********************************************************************
-        #   Ask MAV to clear waypoints
-        #**********************************************************************
-        start_time = rospy.Time.now() # must be set before clear_all_send
-        self.last_wp_ack_result = -1  # for comparison to valid vals
-        self.connection.waypoint_clear_all_send()
-
-        #**********************************************************************
-        #   Wait for MAV to acknowledge receipt of all waypoints
-        #   and update MAV waypoint state information on success
-        #**********************************************************************
-        status = self.wait_for_wp_ack(start_time)
-        if SUCCESS_ERR == status:
-            self.state.num_of_waypoints = 0
-        return status
+        return SUCCESS_ERR
             
     def get_waypoints_cb(self, req):
         """Request list of waypoints from MAV
@@ -513,198 +359,7 @@ class MavRosProxy:
            to update the waypoint list
         """
 
-        #**********************************************************************
-        #   Flag the waypoints as unsynced
-        #**********************************************************************
-        self.waypoints_synced_with_mav = [None]
-        self.waypoints_synced_with_mav = [False]
-
-        #**********************************************************************
-        #   Send request for waypoints to MAV
-        #**********************************************************************
-        start_time = rospy.Time.now()   # important we record this b4 request
-        self.connection.waypoint_request_list_send()
-
-        #**********************************************************************
-        #   Wait for waypoints to get in sync again
-        #**********************************************************************
-        while not all(self.waypoints_synced_with_mav):
-            rospy.sleep(BUSY_WAIT_INTERVAL)
-            if rospy.Time.now() - start_time > self.command_timeout:
-                rospy.logerr("[MAVROS:%s]Time out waiting for mav to "
-                              "send all waypoints" % self.uav_name)
-                return [], MAV_TIMEOUT_ERR
-
-        #**********************************************************************
-        #   If we get this far, return waypoints successfully
-        #**********************************************************************
         return self.current_waypoints, SUCCESS_ERR
-
-    def handle_waypoint_from_mav(self,msg):
-        """Handle waypoints sent from MAV
-
-           Implements the next step in the waypoint request protocol.
-
-           Syncs the specified waypoint if its not in sync, and requests
-           the next waypoint if there are still more to be synced.
-
-           If this is the last waypoint, a final acknowledgement is sent to the
-           MAV.
-
-           Otherwise, if all waypoints are already in sync, then this item
-           has probably been sent in error.
-
-           Parameters
-           msg -- mavlink message of type MISSION_ITEM
-        """
-
-        #**********************************************************************
-        #   Sanity check that we have a consistent state
-        #**********************************************************************
-        if len(self.waypoints_synced_with_mav) != \
-           len(self.current_waypoints):
-
-           rospy.logerr("[MAVROS %s] INTERNAL ERROR - "
-                        "len(current_waypoints) != "
-                        "len(waypoints_synced_with_mav)" % self.uav_name)
-
-           return
-
-        #**********************************************************************
-        #   Ensure we have a MISSION_ITEM msg
-        #**********************************************************************
-        if msg.get_type() != "MISSION_ITEM":
-            rospy.logerr("[MAVROS %s] INTERNAL ERROR: handle_waypoint_from_mav"
-                         " called for non MISSION_ITEM message")
-            return
-
-        #**********************************************************************
-        #   If all waypoints are already synced, then this is unexpected
-        #   receipt.
-        #**********************************************************************
-        if all(self.waypoints_synced_with_mav):
-            rospy.logwarn("[MAVROS %s] Received unexpected MISSION_ITEM "
-                          "when all waypoints are synced" % self.uav_name)
-            return
-
-        #**********************************************************************
-        #   Ensure waypoint is what we expect
-        #**********************************************************************
-        if msg.get_srcSystem() != self.connection.target_system:
-            rospy.logwarn("[MAVROS %s] Received MISSION_ITEM for system %d "
-                          " but our system is %d - ignoring" %
-                          (self.uav_name, msg.get_srcSystem(),
-                           self.connection.target_system) )
-            return
-
-        if msg.get_srcComponent() != self.connection.target_component:
-            rospy.logwarn("[MAVROS %s] Received MISSION_ITEM for component %d "
-                          " but our component is %d - ignoring" %
-                          (self.uav_name, msg.get_srcComponent(),
-                           self.connection.target_component) )
-            return
-
-        if msg.frame != mav.MAV_FRAME_GLOBAL_RELATIVE_ALT:
-            rospy.logwarn("[MAVROS %s] Received MISSION_ITEM in "
-                          " unexpected frame %d - ignoring" %
-                          (self.uav_name, msg.frame) )
-            return
-
-        if msg.command != mav.MAV_CMD_NAV_WAYPOINT:
-            rospy.logwarn("[MAVROS %s] Received MISSION_ITEM with "
-                          " unexpected command type %d - ignoring" %
-                          (self.uav_name, msg.frame) )
-            return
-
-        #**********************************************************************
-        #   If waypoint is out of range, then ignore silently
-        #   Note: we may wish to consider sending acknowledgement to MAV
-        #   with error code (MAV_ERR_STATUS=1).
-        #**********************************************************************
-        if 0 > msg.seq or msg.seq >= len(self.current_waypoints):
-            rospy.logwarn("[MAVROS %s] Received MISSION_ITEM with "
-                          "out of range waypoint id" % self.uav_name)
-            return
-
-        #**********************************************************************
-        #   Sync the specified waypoint
-        #**********************************************************************
-        waypoint = mavros.msg.Waypoint()
-        waypoint.autocontinue = (1==msg.autocontinue)
-        waypoint.radius = msg.param1
-        waypoint.waitTime = rospy.Duration(secs=msg.param2/1000.0)
-        waypoint.frame = mavros.msg.Waypoint.FRAME_GLOBAL
-        waypoint.x = msg.x
-        waypoint.y = msg.y
-        waypoint.z = msg.z
-
-        self.current_waypoints[msg.seq] = waypoint
-        self.waypoints_synced_with_mav[msg.seq] = True
-
-        #**********************************************************************
-        #   If everything is now in sync, acknowledge receipt of all waypoints
-        #**********************************************************************
-        if all(self.waypoints_synced_with_mav):
-            rospy.loginfo("[MAVROS %s] final waypoint received from MAV" %
-                          self.uav_name)
-            self.connection.mav.mission_ack_send(
-                    self.connection.target_system,
-                    self.connection.target_component, MAV_OK_STATUS)
-            return
-
-        #**********************************************************************
-        #   Otherwise, request the next unsynced waypoint
-        #   Note: list.index(X) returns index of first occurrence of X
-        #**********************************************************************
-        next_waypoint_id = self.waypoints_synced_with_mav.index(False)  
-        self.connection.waypoint_request_send(next_waypoint_id)
-
-        #**********************************************************************
-        #   If we get this far, log success
-        #**********************************************************************
-        rospy.loginfo("[MAVROS %s] waypoint %d received from MAV" %
-                      (self.uav_name, msg.seq) )
-        return
-
-    def handle_waypoint_count(self,msg):
-        """Handles waypoint count message set from MAV
-
-           Initiates waypoint protocol to retrieve waypoint list from MAV
-        """
-
-        rospy.loginfo("[MAVROS:%s]MISSION_COUNT: Number of Mission "
-            "Items - %s" % (self.uav_name, str(msg.count)))
-
-        #**********************************************************************
-        #   Update message count based on message
-        #**********************************************************************
-        self.state.num_of_waypoints = msg.count
-        self.current_waypoints = [None] * msg.count
-
-        #**********************************************************************
-        #   Mark all waypoints (if any) as unsynced
-        #**********************************************************************
-        self.waypoints_synced_with_mav = [False] * msg.count 
-
-        #**********************************************************************
-        #   If the count is zero, then be polite and acknowledge the message
-        #   - as dictated by mavlink waypoint protocol
-        #**********************************************************************
-        if all(self.waypoints_synced_with_mav):
-            rospy.logdebug("[MAVROS %s] Sending acknowledgement for zero count"
-                    % self.uav_name)
-            self.connection.mav.mission_ack_send(
-                    self.connection.target_system,
-                    self.connection.target_component, MAV_OK_STATUS)
-            return
-
-        #**********************************************************************
-        #   If there are any waypoints, the initiate the mavlink waypoint
-        #   request protocol by requesting the first one -- waypoint 0.
-        #   Subsequent MISSION_ITEM messages sent in response should then be
-        #   be handled in the main loop.
-        #**********************************************************************
-        self.connection.waypoint_request_send(0)
 
     def set_waypoints_cb(self, req):
         """Callback implementing mavros/SetWaypoints service.
@@ -775,47 +430,6 @@ class MavRosProxy:
         #   Update our internal list of waypoints ready for transmission
         #**********************************************************************
         self.current_waypoints = req.waypoints
-        self.waypoints_synced_with_mav = [False] * len(req.waypoints)
-
-        #**********************************************************************
-        #   If there are no waypoints, we've already cleared them, so
-        #   we're done.
-        #   Note: If we don't stop here, drone quite happily requests
-        #   waypoint 0, even though we don't have one!
-        #**********************************************************************
-        if 0==len(req.waypoints):
-            rospy.loginfo("Waypoint list is now empty.")
-            return SUCCESS_ERR
-        
-        #**********************************************************************
-        # Tell MAV how many waypoints we're about to send, and wait for it
-        # to start requesting all waypoints
-        #**********************************************************************
-        start_time = rospy.Time.now()  # to be safe set before count_send
-        rospy.logdebug("sending waypoint count: %d" % len(req.waypoints))
-        self.connection.waypoint_count_send(len(req.waypoints))
-        while not all(self.waypoints_synced_with_mav):
-            rospy.sleep(BUSY_WAIT_INTERVAL)
-            if rospy.Time.now() - start_time > self.command_timeout:
-                rospy.logerr("[MAVROS:%s]Time out waiting for mav to "
-                              "request all waypoints" % self.uav_name)
-                return MAV_TIMEOUT_ERR
-
-        #**********************************************************************
-        #   Wait for MAV to acknowledge receipt of all waypoints, before
-        #   updating count of waypoints on MAV
-        #**********************************************************************
-        status = self.wait_for_wp_ack(start_time)
-        if SUCCESS_ERR == status:
-            self.state.num_of_waypoints = len(self.current_waypoints)
-        else:
-            rospy.logerr("[MAVROS:%s] Failed to successfully send waypoints" %
-                          self.uav_name)
-            return status
-
-        #**********************************************************************
-        #   If we get this far, return success
-        #**********************************************************************
         rospy.loginfo("[MAVROS:%s] waypoints transmitted successfully" %
                       self.uav_name)
         return SUCCESS_ERR
@@ -824,88 +438,28 @@ class MavRosProxy:
 
         #**********************************************************************
         #   Ensure waypoint id is in range
+        #   Note: waypoint 0 is always ok - even if the waypoint list is empty
         #**********************************************************************
-        if 0 > msg.waypoint_id or \
-               msg.waypoint_id >= len(self.current_waypoints):
+        rospy.loginfo("[MAVROS] Processing mission request %s" % msg)
+        waypoint_defined = (0 <= msg.waypoint_id) and \
+            ( msg.waypoint_id < len(self.current_waypoints) )
 
+        # make special case for waypoint 0 when queue is empty
+        if 0==msg.waypoint_id and 0==len(self.current_waypoints):
+            waypoint_defined = True
+
+        if not waypoint_defined:
             rospy.logerr("[MAVROS:%s] requested waypoint %d is undefined" %
                          (self.uav_name, msg.waypoint_id) )
-
             return UNDEFINED_WAYPOINT_ERR
 
         #**********************************************************************
         #   Set current mission to the next waypoint
         #**********************************************************************
-        start_time = rospy.Time.now()
-        while self.last_current_wp_report_time < start_time:
-            rospy.sleep(BUSY_WAIT_INTERVAL)
-            if rospy.Time.now() - start_time > self.command_timeout:
-                rospy.logerr("[MAVROS:%s]Time out setting current mission" %
-                              self.uav_name)
-                return MAV_TIMEOUT_ERR
-            self.connection.mav.mission_set_current_send(
-                    self.connection.target_system,
-                    self.connection.target_component, msg.waypoint_id)
-
-        #**********************************************************************
-        #   If we get this far, return success
-        #**********************************************************************
         rospy.loginfo("[MAVROS:%s] Current mission set to waypoint %d" %
                       (self.uav_name, msg.waypoint_id) )
 
-    def respond_to_wp_request(self, msg):
-        """Transmits a single waypoint to the MAV on request
-
-           Parameters:
-           waypoint - single mavros/Waypoint.msg object to transmit
-
-        """
-
-        #**********************************************************************
-        #   Ensure the requested waypoint is a valid sequence number
-        #**********************************************************************
-        if len(self.current_waypoints) <= msg.seq:
-            rospy.logwarn("[MAVROS:%s] Ignoring request for waypoint with "
-                "out of range sequence number %d" % (self.uav_name, msg.seq) )
-            return
-
-        #**********************************************************************
-        #   Send the waypoint.
-        #   Note we currently set the target yaw orientiation always to north
-        #   and the loiter circle radius to 0.
-        #   In future, we might want to make these attributes of the
-        #   mavros/Waypoint.msg, so we can set them dynamically
-        #**********************************************************************
-        waypoint = self.current_waypoints[msg.seq]
-        autocontinue_flag = 0
-        if waypoint.autocontinue:
-            autocontinue_flag = 1
-        waitTime_in_ms = waypoint.waitTime.to_sec() * 1000;
-        self.connection.mav.mission_item_send(
-                self.connection.target_system,      # target system for wp
-                self.connection.target_component,   # target component for wp
-                msg.seq,                            # wp sequence number
-                mav.MAV_FRAME_GLOBAL_RELATIVE_ALT,  # coordinate frame
-                mav.MAV_CMD_NAV_WAYPOINT,           # goto waypoint
-                0,                      # don't make this the current wp yet
-                autocontinue_flag,      # continue to next waypoint or not
-                waypoint.radius,        # range MAV must get within wp
-                waitTime_in_ms,         # minimum time to spend at wp (ms)
-                0,                      # radius of loiter circle (needed?)
-                0,                      # Yaw orientiation (0=NORTH)
-                waypoint.x,             # latitude
-                waypoint.y,             # longitude
-                waypoint.z)             # altitude (relative to ground)
-
-        #**********************************************************************
-        #   Log the request
-        #**********************************************************************
-        self.waypoints_synced_with_mav[msg.seq] = True
-        self.last_wp_request_time = rospy.Time.now()
-        rospy.loginfo(
-            "[MAVROS:%s]MISSION_REQUEST: Waypoint %d sent for system %d"
-            " for component %d" % (self.uav_name, msg.seq, msg.target_system,
-                                  msg.target_component))
+        return SUCCESS_ERR
 
     def start(self):
 
@@ -931,9 +485,19 @@ class MavRosProxy:
                       self.set_mission_cb)
 
         #**********************************************************************
-        # Stay alive until interrupted
+        # Periodically send dummy current position
         #**********************************************************************
-        rospy.spin()
+        latitude_delta = 0.0
+        while not rospy.is_shutdown():
+            rospy.sleep(0.2)
+            pos = mavros.msg.FilteredPosition()
+            pos.header.stamp = rospy.Time.now()
+            pos.latitude = 55.0 + latitude_delta
+            pos.longitude = -2.0
+            pos.altitude = 1.0
+            pos.relative_altitude = 1.0
+            self.pub_filtered_pos.publish(pos)
+            latitude_delta += 0.000001
 
 #******************************************************************************
 # Parse any arguments that follow the node command

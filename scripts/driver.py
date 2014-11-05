@@ -746,7 +746,7 @@ class MavRosProxy:
         #   Clear waypoints
         #**********************************************************************
         elif req.command == mavros.srv.CommandRequest.CMD_CLEAR_WAYPOINTS:
-            return clear_waypoints_cmd(self)
+            return self.clear_waypoints_cmd()
 
         #**********************************************************************
         #   Return error if we get an undefined command
@@ -1139,13 +1139,18 @@ class MavRosProxy:
 
         #**********************************************************************
         #   Ensure waypoint id is in range
+        #   Note: waypoint 0 is always OK, even if waypoint list is empty
         #**********************************************************************
-        if 0 > msg.waypoint_id or \
-               msg.waypoint_id >= len(self.current_waypoints):
+        waypoint_defined = (0 <= msg.waypoint_id) and \
+            ( msg.waypoint_id < len(self.current_waypoints) )
 
+        # make special case for waypoint 0 when queue is empty
+        if 0==msg.waypoint_id and 0==len(self.current_waypoints):
+            waypoint_defined = True
+
+        if not waypoint_defined:
             rospy.logerr("[MAVROS:%s] requested waypoint %d is undefined" %
                          (self.uav_name, msg.waypoint_id) )
-
             return UNDEFINED_WAYPOINT_ERR
 
         #**********************************************************************
@@ -1167,6 +1172,7 @@ class MavRosProxy:
         #**********************************************************************
         rospy.loginfo("[MAVROS:%s] Current mission set to waypoint %d" %
                       (self.uav_name, msg.waypoint_id) )
+        return SUCCESS_ERR
 
     def respond_to_wp_request(self, msg):
         """Transmits a single waypoint to the MAV on request

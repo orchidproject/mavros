@@ -1,6 +1,7 @@
 #!/usr/bin/env python
 """Utility functions used by package python scripts"""
 from utm import from_latlon, to_latlon
+import math
 import rospy
 import mavros.msg as msg
 import diagnostic_msgs
@@ -70,10 +71,12 @@ class UTMWaypoint:
         """
         self.easting = easting
         self.northing = northing
+        self.altitude = altitude
         self.zone_number = zone_number
         self.zone_letter = zone_letter
 
-    def from_waypoint_message(cls,msg):
+    @classmethod
+    def from_waypoint_message(cls,wp):
         """Constructs a new UTMWaypoint from a waypoint message
 
            Parameters
@@ -88,18 +91,18 @@ class UTMWaypoint:
         #   Don't accept waypoint if its not global.
         #   Return None to indicate failure
         #**********************************************************************
-        if msg.Waypoint.FRAME_GLOBAL != msg.frame:
+        if msg.Waypoint.FRAME_GLOBAL != wp.frame:
             return None
 
         #**********************************************************************
         #   Otherwise return a new representation, using mapping defined
         #   in mavros/Waypoint.msg
         #**********************************************************************
-        (east, north, z_num, z_let) = from_latlon(msg.x,msg.y)       
+        (east, north, z_num, z_let) = from_latlon(wp.x,wp.y)       
         result = cls()  # a new UTMWaypoint instance
         result.easting = east
         result.northing = north
-        result.altitude = 0.0
+        result.altitude = wp.z
         result.zone_number = z_num
         result.zone_letter = z_let
         return result
@@ -142,7 +145,7 @@ class UTMWaypoint:
         #**********************************************************************
         wp.autocontinue = False
         wp.radius = 0.0
-        wp.waitTime = 0.0
+        wp.waitTime = rospy.Duration(secs=0.0)
         return wp
 
     def to_global_waypoint(self):
@@ -154,36 +157,37 @@ class UTMWaypoint:
 class GlobalWaypoint:
     """Utility class for representing waypoints in global frame"""
     def __init__(self,lat=None,lon=None,alt=None):
-        latitude = lat
-        longitude = lon
-        altitude = alt
+        self.latitude = lat
+        self.longitude = lon
+        self.altitude = alt
 
-    def from_waypoint_message(cls,msg):
+    @classmethod
+    def from_waypoint_message(cls,wp):
         """Constructs a new GlobalWaypoint instance from a waypoint message
 
            Example usage:
-           waypoint = GlobalWaypoint.from_waypoint_message(msg)
+           waypoint = GlobalWaypoint.from_waypoint_message(wp)
 
            Parameters
-           msg - a mavros/Waypoint.msg in the global coordinate frame
+           wp - a mavros/Waypoint.msg in the global coordinate frame
 
            Returns
-           - A new GlobalWaypoint with coordinates taken from msg
-           - None if msg is not in the global coordinate frame
+           - A new GlobalWaypoint with coordinates taken from wp
+           - None if wp is not in the global coordinate frame
         """
 
         #**********************************************************************
         #   Don't accept waypoint if its not global.
         #   Return None to indicate failure
         #**********************************************************************
-        if msg.Waypoint.FRAME_GLOBAL != msg.frame:
+        if msg.Waypoint.FRAME_GLOBAL != wp.frame:
             return None
 
         #**********************************************************************
         #   Otherwise return a new representation, using mapping defined
         #   in mavros/Waypoint.msg
         #**********************************************************************
-        return cls(lat=msg.x, lon=msg.y, alt=msg.z)
+        return cls(lat=wp.x, lon=wp.y, alt=wp.z)
 
     def to_waypoint_message(self):
         """Converts this waypoint into a mavros/Waypoint message
@@ -212,7 +216,7 @@ class GlobalWaypoint:
         #**********************************************************************
         wp.autocontinue = False
         wp.radius = 0.0
-        wp.waitTime = 0.0
+        wp.waitTime = rospy.Duration(secs=0.0)
         return wp
 
 #******************************************************************************
@@ -238,22 +242,22 @@ def distance_along_ground(wp1,wp2):
     #**************************************************************************
     #   Convert UTM coordinates to global coordinates
     #**************************************************************************
-    if type(wp1) is UTMWaypoint:
+    if isinstance(wp1, UTMWaypoint):
         wp1 = wp1.to_global_waypoint()
 
-    if type(wp2) is UTMWaypoint:
-        wp1 = wp1.to_global_waypoint()
+    if isinstance(wp2, UTMWaypoint):
+        wp2 = wp2.to_global_waypoint()
 
     #**************************************************************************
     #   Convert parameters if they are waypoint messages
     #   Return None if they are not in GLOBAL frame
     #**************************************************************************
-    if type(wp1) is msg.Waypoint:
+    if isinstance(wp1, msg.Waypoint):
         wp1 = GlobalWaypoint.from_waypoint_message(wp1)
         if wp1 is None:
             return None
         
-    if type(wp2) is msg.Waypoint:
+    if isinstance(wp2, msg.Waypoint):
         wp2 = GlobalWaypoint.from_waypoint_message(wp2)
         if wp2 is None:
             return None
