@@ -5,6 +5,7 @@ import math
 import rospy
 import mavros.msg as msg
 import diagnostic_msgs
+import diagnostic_msgs.msg
 from mavros.msg import Error
 from math import radians, cos, sin, asin, sqrt
 

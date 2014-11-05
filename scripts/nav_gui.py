@@ -170,7 +170,7 @@ class NavGUI:
         clear = Button(frame4, text="Clear", command=lambda: self.__clear_queue(), font=self.font)
         clear.pack(side=RIGHT)
 
-        run = Button(frame5, text="Execute", command=lambda: self.__execute_queue(), font=self.font)
+        run = Button(frame5, text="Execute", command=lambda: self.__resume_queue(), font=self.font)
         run.pack(side=LEFT)
         pause = Button(frame5, text="Pause", command=lambda: self.__pause_queue(), font=self.font)
         pause.pack(side=LEFT)
@@ -219,7 +219,7 @@ class NavGUI:
         self.root.bind("<f>", lambda (event): self.__land() )
         self.root.bind("<c>", lambda (event): self.__clear_queue() )
         self.root.bind("<v>", lambda (event): self.__add_waypoints() )
-        self.root.bind("<k>", lambda (event): self.__execute_queue() )
+        self.root.bind("<k>", lambda (event): self.__resume_queue() )
         self.root.bind("<l>", lambda (event): self.__pause_queue() )
         self.root.bind("<j>", lambda (event): self.__toggle_camera() )
         self.root.bind("<space>", lambda (event): self.__land_all() )
@@ -264,15 +264,15 @@ class NavGUI:
     #   Functions for controlling multiple drones
     #**************************************************************************
     def __takeoff_all(self):
-        self.pub_takeoff_all( EmptyMsg() )
+        self.pub_takeoff_all.publish( EmptyMsg() )
         self.__loginfo("TAKEOFF ALL")
 
     def __kill_all(self):
-        self.pub_emergency_all( EmptyMsg() )
+        self.pub_emergency_all.publish( EmptyMsg() )
         self.__loginfo("KILL ALL")
 
     def __land_all(self):
-        self.pub_land_all( EmptyMsg() )
+        self.pub_land_all.publish( EmptyMsg() )
         self.__loginfo("LAND ALL")
 
     #**************************************************************************
@@ -285,10 +285,10 @@ class NavGUI:
         #   Decide which camera we want to make active - i.e. the currently
         #   inactive one
         #**********************************************************************
-        if mavros.srv.SelectCamera.FRONT == self.current_camera:
-            target_camera = mavros.srv.SelectCamera.BOTTOM
+        if mavros.srv.SelectCameraRequest.FRONT == self.current_camera:
+            target_camera = mavros.srv.SelectCameraRequest.BOTTOM
         else:
-            target_camera = mavros.srv.SelectCamera.FRONT
+            target_camera = mavros.srv.SelectCameraRequest.FRONT
 
         #**********************************************************************
         #   Ask the controller to change camera to the one we want
@@ -300,7 +300,7 @@ class NavGUI:
                 " camera: %s" % e)
             return
 
-        if SUCCCESS_ERR == response.status:
+        if SUCCESS_ERR == response.status:
             self.__loginfo("Camera toggled")
         else:
             self.__logerr("Failed to toggle camera with error code: %d" %
@@ -313,29 +313,29 @@ class NavGUI:
 
     def __set_manual_mode(self):
         """Set the drone to MANUAL mode"""
-        status = self.__set_mode(mavros.srv.SetMode.MANUAL)
-        if SUCCESS_ERR != status
+        status = self.__set_mode(mavros.srv.SetModeRequest.MANUAL)
+        if SUCCESS_ERR != status:
             self.__logerr("Failed to enter MANUAL mode with error code %d" %
                     status)
-        else
+        else:
             self.__loginfo("Now in MANUAL mode")
 
     def __set_auto_mode(self):
         """Set the drone to AUTO mode"""
-        status = self.__set_mode(mavros.srv.SetMode.AUTO)
-        if SUCCESS_ERR != status
+        status = self.__set_mode(mavros.srv.SetModeRequest.AUTO)
+        if SUCCESS_ERR != status:
             self.__logerr("Failed to enter AUTO mode with error code %d" %
                     status)
-        else
+        else:
             self.__loginfo("Now in AUTO mode")
 
     def __set_emergency_mode(self):
         """Set the drone to EMERGENCY mode"""
-        status = self.__set_mode(mavros.srv.SetMode.EMERGENCY)
-        if SUCCESS_ERR != status
+        status = self.__set_mode(mavros.srv.SetModeRequest.EMERGENCY)
+        if SUCCESS_ERR != status:
             self.__logerr("Failed to enter EMERGENCY mode with error code %d" %
                     status)
-        else
+        else:
             self.__loginfo("Now in EMERGENCY mode")
 
     def __set_mode(self,mode):
@@ -354,7 +354,7 @@ class NavGUI:
             self.__logerr("Exception caught while trying to set origin: %s" % e)
             return
 
-        if SUCCESSS_ERR != response.status:
+        if SUCCESS_ERR != response.status:
             self.__logerr("Error code %d returned while setting origin" %
                     response.status)
         else:
@@ -367,7 +367,7 @@ class NavGUI:
             self.__logerr("Exception caught while trying to clear queue: %s" % e)
             return
 
-        if SUCCESSS_ERR != response.status:
+        if SUCCESS_ERR != response.status:
             self.__logerr("Error code %d returned while clearing queue" %
                     response.status)
         else:
@@ -380,7 +380,7 @@ class NavGUI:
             self.__logerr("Exception caught while trying to pause queue: %s" % e)
             return
 
-        if SUCCESSS_ERR != response.status:
+        if SUCCESS_ERR != response.status:
             self.__logerr("Error code %d returned while pausing queue" %
                     response.status)
         else:
@@ -393,7 +393,7 @@ class NavGUI:
             self.__logerr("Exception caught while trying to resume queue: %s" % e)
             return
 
-        if SUCCESSS_ERR != response.status:
+        if SUCCESS_ERR != response.status:
             self.__logerr("Error code %d returned while resume queue" %
                     response.status)
         else:
@@ -401,12 +401,12 @@ class NavGUI:
 
     def __land(self):
         try:
-            response = self.resume_queue_srv()
+            response = self.land_srv()
         except rospy.ServiceException as e:
             self.__logerr("Exception caught while trying to land: %s" % e)
             return
 
-        if SUCCESSS_ERR != response.status:
+        if SUCCESS_ERR != response.status:
             self.__logerr("Error code %d returned while landing" %
                     response.status)
         else:
@@ -414,12 +414,12 @@ class NavGUI:
 
     def __takeoff(self):
         try:
-            response = self.resume_queue_srv()
+            response = self.takeoff_srv()
         except rospy.ServiceException as e:
             self.__logerr("Exception caught while trying to takeoff: %s" % e)
             return
 
-        if SUCCESSS_ERR != response.status:
+        if SUCCESS_ERR != response.status:
             self.__logerr("Error code %d returned while taking off" %
                     response.status)
         else:
@@ -498,7 +498,6 @@ parser.add_option("-r", "--ros", action="store_true", dest="ros", help="Use ROS 
 if __name__ == '__main__':
     try:
         if not opts.ros or opts.name in rospy.get_param("/drones_active"):
-            rospy.wait_for_service("/" + opts.name + "/queue/cmd")
             rospy.init_node("nav_gui")
             gui = NavGUI(opts.name, True)
             gui.start()
