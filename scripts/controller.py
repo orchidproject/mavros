@@ -1344,8 +1344,8 @@ class Controller:
         #***********************************************************************
         status = self.pause_queue_cb()
         if SUCCESS_ERR != status:
-            self.logerr("Failed to clear queue, due to failure to pause.")
-            return
+            self.logerr("Failed to pause queue, prior to clearing "
+                    " - error code: %d" % status)
 
         #***********************************************************************
         #   Clear internal queue structure
@@ -1361,18 +1361,19 @@ class Controller:
 
         try:
             response = self.mav_command_srv(request)
+            status = response.status
         except rospy.ServiceException as e:
             self.__logerr("MAVCommand service threw exception while trying"
                 "to clear waypoints: %s" % e)
-            return SERVICE_CALL_FAILED_ERR
+            status = SERVICE_CALL_FAILED_ERR
 
-        if SUCCESS_ERR != response.status:
+        if SUCCESS_ERR != status:
             self.__logerr("Could not clear waypoints on drone")
             self.__logwarn("Waypoints cleared but may be out of sync with"
                     " drone.")
         else:
             self.__loginfo("Waypoint queue cleared and synced with drone.")
-        return response.status
+        return status
 
     def pause_queue_cb(self,req=None):
         """Callback for pausing execution of the queue
@@ -1612,20 +1613,25 @@ class Controller:
         self.__ros_init()
 
         #***********************************************************************
-        #   Try to load drone parameters from ROS Parameter server
+        #   Try to load drone parameters from ROS Parameter server, but do
+        #   best to continue
         #***********************************************************************
         status = self.__load_drone_params()
         if SUCCESS_ERR != status:
-            self.__logfatal("Failed to load parameters for drone.")
-            return
+            self.__logerr("Failed to load parameters for drone.")
 
         #***********************************************************************
-        #   Try to sync parameters with drone
+        #   Try to sync parameters with drone, but do best to continue
         #***********************************************************************
         status = self.__sync_params_with_drone()
         if SUCCESS_ERR != status:
-            self.__logfatal("Failed to sync parameters with drone.")
-            return
+            self.__logerr("Failed to sync parameters with drone.")
+
+        #***********************************************************************
+        #   Try to clear queue and sync with drone. If this doesn't work
+        #   and error will be logged, but we'll do are best to continue.
+        #***********************************************************************
+        self.clear_queue_cb()
 
         #**********************************************************************
         #   Start diagnostics running
