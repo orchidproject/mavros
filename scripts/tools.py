@@ -294,7 +294,32 @@ def total_distance(wp1,wp2):
        Parameters can be of any type, provided they have member variables
        named latitude and longitude specifying coordinates in degrees.
     """
+    #**************************************************************************
+    #   Convert UTM coordinates to global coordinates
+    #**************************************************************************
+    if isinstance(wp1, UTMWaypoint):
+        wp1 = wp1.to_global_waypoint()
 
+    if isinstance(wp2, UTMWaypoint):
+        wp2 = wp2.to_global_waypoint()
+
+    #**************************************************************************
+    #   Convert parameters if they are waypoint messages
+    #   Return None if they are not in GLOBAL frame
+    #**************************************************************************
+    if isinstance(wp1, msg.Waypoint):
+        wp1 = GlobalWaypoint.from_waypoint_message(wp1)
+        if wp1 is None:
+            return None
+        
+    if isinstance(wp2, msg.Waypoint):
+        wp2 = GlobalWaypoint.from_waypoint_message(wp2)
+        if wp2 is None:
+            return None
+
+    #**************************************************************************
+    #   Calculate total distance
+    #**************************************************************************
     vertical_distance = wp1.altitude-wp2.altitude
     horizontal_distance = distance_along_ground(wp1,wp2)
 

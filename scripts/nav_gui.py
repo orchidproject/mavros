@@ -224,7 +224,7 @@ class NavGUI:
         self.root.bind("<j>", lambda (event): self.__toggle_camera() )
         self.root.bind("<space>", lambda (event): self.__land_all() )
         self.root.bind("<F11>", lambda (event): self.__takeoff_all() )
-        self.root.bind("<F12>", lambda (event): self.kill_all())
+        self.root.bind("<F12>", lambda (event): self.__kill_all())
 
     def setup_help(self):
         frame = Frame(self.root)
@@ -426,8 +426,59 @@ class NavGUI:
             self.__loginfo("Taking off.")
 
     def __add_waypoints(self):
-        self.__logwarn("Adding waypoints not yet implemented!")
-        #self.inst.publish(construct_waypoints_local(1, self.command_switch)))
+
+        #**********************************************************************
+        #   Construct waypoint 5m east, 2m north
+        #**********************************************************************
+        wp1 = mavros.msg.Waypoint()
+        wp1.autocontinue = True
+        wp1.waitTime = rospy.Duration(secs=1.0)
+        wp1.radius = 2.0
+        wp1.frame = mavros.msg.Waypoint.FRAME_LOCAL
+        wp1.x = 5.0
+        wp1.y = 2.0
+        wp1.z = 1.0
+
+        #**********************************************************************
+        #   Construct waypoint 5m west, 2m south
+        #**********************************************************************
+        wp2 = mavros.msg.Waypoint()
+        wp2.autocontinue = True
+        wp2.waitTime = rospy.Duration(secs=1.0)
+        wp2.radius = 2.0
+        wp2.frame = mavros.msg.Waypoint.FRAME_LOCAL
+        wp2.x = -5.0
+        wp2.y = -2.0
+        wp2.z = 1.0
+
+        #**********************************************************************
+        #   Construct waypoint at origin
+        #**********************************************************************
+        wp3 = mavros.msg.Waypoint()
+        wp3.autocontinue = False
+        wp3.waitTime = rospy.Duration(secs=1.0)
+        wp3.radius = 2.0
+        wp3.frame = mavros.msg.Waypoint.FRAME_LOCAL
+        wp3.x = 0.0
+        wp3.y = 0.0
+        wp3.z = 0.0
+
+        #**********************************************************************
+        #   Try to add waypoints to the queue
+        #**********************************************************************
+        waypoints = [wp1, wp2, wp3]
+        try:
+            response = self.add_waypoints_srv(waypoints)
+        except rospy.ServiceException as e:
+            self.__logerr("Exception occurred while trying to add"
+                " waypoints: %s" % e)
+            return
+
+        if SUCCESS_ERR == response.status:
+            self.__loginfo("Waypoints added")
+        else:
+            self.__logerr("Failed to add waypoints with error code: %d" %
+                    response.status)
 
     def __add_sweep(self):
         self.__logwarn("Adding sweep not yet implemented!")

@@ -460,7 +460,7 @@ class Controller:
         #**********************************************************************
         #   Only allow LOCAL waypoints if our origin is set
         #**********************************************************************
-        elif msg.Wayoint.FRAME_LOCAL == waypoint.frame:
+        elif msg.Waypoint.FRAME_LOCAL == waypoint.frame:
 
             if self.origin is None:
                 return False
@@ -1371,7 +1371,7 @@ class Controller:
         #***********************************************************************
         status = self.pause_queue_cb()
         if SUCCESS_ERR != status:
-            self.logerr("Failed to pause queue, prior to clearing "
+            self.__logerr("Failed to pause queue, prior to clearing "
                     " - error code: %d" % status)
 
         #***********************************************************************
@@ -1560,7 +1560,7 @@ class Controller:
         #***********************************************************************
         for wp in req.waypoints:
             if not self.__valid_waypoint(wp):
-                self.logerr("Cannot add waypoints because one or more "
+                self.__logerr("Cannot add waypoints because one or more "
                         " waypoints are invalid.")
                 return WAYPOINT_VERIFICATION_FAILURE_ERR
 
@@ -1576,7 +1576,7 @@ class Controller:
         #***********************************************************************
         status = self.__set_waypoints_from_queue()
         if SUCCESS_ERR != status:
-            self.logerr("Failed to add and sync waypoints with drone")
+            self.__logerr("Failed to add and sync waypoints with drone")
 
         return status
 
