@@ -481,13 +481,94 @@ class NavGUI:
                     response.status)
 
     def __add_sweep(self):
-        self.__logwarn("Adding sweep not yet implemented!")
+
+        #**********************************************************************
+        #   Generate request for rectangular sweep
+        #**********************************************************************
+        request = mavros.srv.AddSweepRequest()
+        request.radius = 1.0
+        request.waitTime = rospy.Duration(secs=1.0)
+        request.row_width = 3.0
+        request.wp_interval = 3.0
+        request.altitude = 2.0
+        request.start = mavros.msg.MapPoint(easting=0.0, northing=0.0)
+        request.end = mavros.msg.MapPoint(easting=21.0, northing=21.0)
+
+        #**********************************************************************
+        #   Try to call controller service to add pattern to queue
+        #**********************************************************************
+        try:
+            response = self.add_sweep_srv(request)
+        except rospy.ServiceException as e:
+            self.__logerr("Exception occurred while trying to add"
+                " rectangular sweep pattern: %s" % e)
+            return
+
+        if SUCCESS_ERR == response.status:
+            self.__loginfo("Rectangular sweep pattern added")
+        else:
+            self.__logerr("Failed to add rectangular sweep with error "
+                    "code: %d" % response.status)
 
     def __add_spiral_out(self):
-        self.__logwarn("Adding spiral out not yet implemented!")
+
+        #**********************************************************************
+        #   Generate request for spiral out pattern
+        #**********************************************************************
+        request = mavros.srv.AddSweepRequest()
+        request.radius = 1.5
+        request.waitTime = rospy.Duration(secs=1.0)
+        request.row_width = 3.0
+        request.wp_interval = 3.0
+        request.altitude = 1.0
+        request.start = mavros.msg.MapPoint(easting=5.0, northing=0.0)
+        request.end = mavros.msg.MapPoint(easting=0.0, northing=21.0)
+
+        #**********************************************************************
+        #   Try to call controller service to add pattern to queue
+        #**********************************************************************
+        try:
+            response = self.add_spiral_out_srv(request)
+        except rospy.ServiceException as e:
+            self.__logerr("Exception occurred while trying to add"
+                " spiral out pattern: %s" % e)
+            return
+
+        if SUCCESS_ERR == response.status:
+            self.__loginfo("Spiral out pattern added")
+        else:
+            self.__logerr("Failed to add spiral out with error code: %d" %
+                    response.status)
         
     def __add_spiral_in(self):
-        self.__logwarn("Adding spiral in not yet implemented!")
+
+        #**********************************************************************
+        #   Generate request for spiral in pattern
+        #**********************************************************************
+        request = mavros.srv.AddSweepRequest()
+        request.radius = 1.5
+        request.waitTime = rospy.Duration(secs=1.0)
+        request.row_width = 3.0
+        request.wp_interval = 3.0
+        request.altitude = 1.0
+        request.start = mavros.msg.MapPoint(easting=-5.0, northing=0.0)
+        request.end = mavros.msg.MapPoint(easting=21.0, northing=0.0)
+
+        #**********************************************************************
+        #   Try to call controller service to add pattern to queue
+        #**********************************************************************
+        try:
+            response = self.add_spiral_in_srv(request)
+        except rospy.ServiceException as e:
+            self.__logerr("Exception occurred while trying to add"
+                " spiral in pattern: %s" % e)
+            return
+
+        if SUCCESS_ERR == response.status:
+            self.__loginfo("Spiral in pattern added")
+        else:
+            self.__logerr("Failed to add spiral in with error code: %d" %
+                    response.status)
 
     #**************************************************************************
     #   Wrapper methods for logging errors and debug messages

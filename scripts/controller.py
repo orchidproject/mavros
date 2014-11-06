@@ -63,7 +63,7 @@ import rospy
 import diagnostic_updater
 import diagnostic_msgs
 from std_msgs.msg import Empty as EmptyMsg
-from uav_utils import sweeps
+from uav_utils.sweeps import spiral_sweep, rect_sweep
 import mavros.srv as srv
 import mavros.msg as msg
 from tools import *
@@ -656,7 +656,7 @@ class Controller:
         #***********************************************************************
         request = srv.AddWaypointsRequest()
         request.waypoints = waypoints
-        return add_waypoints_cb(request)
+        return self.add_waypoints_cb(request)
 
     def __set_waypoints_from_queue(self):
         """Syncs the waypoints on the drone with the currently queued waypoints
@@ -1606,21 +1606,21 @@ class Controller:
            See service definition for details
         """
         start = [req.start.easting, req.start.northing]
-        end = [req.start.easting, req.start.northing]
+        end = [req.end.easting, req.end.northing]
         points = rect_sweep(start, end, req.row_width, req.wp_interval)
         return self.__add_sweep_points(points,req)
 
     def add_spiral_out_cb(self,req):
         """Callback for adding waypoints to spiral out"""
         start = [req.start.easting, req.start.northing]
-        end = [req.start.easting, req.start.northing]
+        end = [req.end.easting, req.end.northing]
         points = spiral_sweep(start, end, req.row_width, req.wp_interval, False)
         return self.__add_sweep_points(points,req)
 
     def add_spiral_in_cb(self,req):
         """Callback for adding waypoints to spiral in"""
         start = [req.start.easting, req.start.northing]
-        end = [req.start.easting, req.start.northing]
+        end = [req.end.easting, req.end.northing]
         points = spiral_sweep(start, end, req.row_width, req.wp_interval, True)
         return self.__add_sweep_points(points,req)
 

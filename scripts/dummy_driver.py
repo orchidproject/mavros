@@ -431,6 +431,8 @@ class MavRosProxy:
         self.current_waypoints = req.waypoints
         rospy.loginfo("[MAVROS:%s] waypoints transmitted successfully" %
                       self.uav_name)
+        rospy.loginfo("Waypoints are: %s" % self.current_waypoints)
+        rospy.loginfo("Number of waypoints: %d" % len(self.current_waypoints) )
         return SUCCESS_ERR
 
     def set_mission_cb(self, msg):
