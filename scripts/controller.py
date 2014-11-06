@@ -1107,7 +1107,7 @@ class Controller:
         #   waypoint before exiting successfully from this function.
         #***********************************************************************
         newly_completed = msg.current_waypoint - self.current_waypoint
-        self.__loginfo("new %d - old %d = %d" % 
+        self.__logdebug("new %d - old %d = %d" % 
                 (msg.current_waypoint, self.current_waypoint, newly_completed))
 
         #***********************************************************************
@@ -1413,6 +1413,20 @@ class Controller:
         del self.waypoint_queue[:]
 
         #***********************************************************************
+        #   Set the UAV mission back to zero. 
+        #   Probably safer than leaving at undefined waypoint.
+        #   A sensible drone might do this anyway.
+        #***********************************************************************
+        try:
+            response = self.set_mission_srv(0)
+            if SUCCESS_ERR != response.status:
+                self.__logwarn("Could not set mission to zero on drone")
+
+        except rospy.ServiceException as e:
+            self.__logwarn("Exception occurred setting mission "
+                    "to zero on drone: %s" % e)
+
+        #***********************************************************************
         #   Try to clear all waypoints stored on the drone
         #***********************************************************************
         request = srv.MAVCommandRequest()
@@ -1480,6 +1494,15 @@ class Controller:
         #***********************************************************************
         if srv.SetModeRequest.AUTO != self.uav_mode:
             self.__logwarn("Can only resume queue while drone is in AUTO mode")
+            return UNSUPPORTED_COMMAND_ERR
+
+        #***********************************************************************
+        #   Lets also avoid resuming the queue if its empty. Not sure what the
+        #   drone might do, or when it might do it.
+        #***********************************************************************
+        if 0 == len(self.waypoint_queue):
+            self.__logwarn("Can not resume an empty queue. "
+                    "Add waypoints first.")
             return UNSUPPORTED_COMMAND_ERR
 
         #***********************************************************************

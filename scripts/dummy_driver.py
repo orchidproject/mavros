@@ -481,6 +481,7 @@ class MavRosProxy:
         #**********************************************************************
         #   Set current mission to the next waypoint
         #**********************************************************************
+        self.state.current_waypoint = msg.waypoint_id
         rospy.loginfo("[MAVROS:%s] Current mission set to waypoint %d" %
                       (self.uav_name, msg.waypoint_id) )
 
