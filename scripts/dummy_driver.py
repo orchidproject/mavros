@@ -153,8 +153,26 @@ class MavRosProxy:
         #**********************************************************************
         #   Internal storage for things to return
         #**********************************************************************
-        self.waypoints = []
-        self.params = {}
+        self.waypoints = []  # waypoint queue - intially empty
+        self.params = {}  # UAV mavlink parameters - initially none defined
+        self.queue_paused = True
+
+        # Simulated UAV state
+        # (only care about current waypoint and number of waypoints)
+        self.state = mavros.msg.State()
+        self.state.base_mode = 0
+        self.state.custom_mode = 0
+        self.state.current_waypoint = 0
+        self.state.system_status = 0
+        self.state.num_of_waypoints = 0
+
+        # Simulated UAV position
+        self.pos = mavros.msg.FilteredPosition()
+        self.pos.header.stamp = rospy.Time.now()
+        self.pos.latitude = 55.0 
+        self.pos.longitude = -2.0
+        self.pos.altitude = 1.0
+        self.pos.relative_altitude = 1.0
 
         #**********************************************************************
         # Register ROS Publications
@@ -267,6 +285,8 @@ class MavRosProxy:
         #**********************************************************************
         if req.command == mavros.srv.CommandRequest.CMD_TAKEOFF:
             rospy.loginfo("[MAVROS:%s]Takeoff" % self.uav_name)
+            self.pos.altitude = 1.0  # AR.Drone reports this when on ground
+            self.pos.relative_altitude = 1.0
             return SUCCESS_ERR
 
         #**********************************************************************
@@ -274,6 +294,8 @@ class MavRosProxy:
         #**********************************************************************
         elif req.command == mavros.srv.CommandRequest.CMD_LAND:
             rospy.loginfo("[MAVROS:%s]Landing" % self.uav_name)
+            self.pos.altitude = 0.4  # AR.Drone reports this when on ground
+            self.pos.relative_altitude = 0.4
             return SUCCESS_ERR
 
         #**********************************************************************
@@ -281,6 +303,7 @@ class MavRosProxy:
         #**********************************************************************
         elif req.command == mavros.srv.CommandRequest.CMD_HALT:
             rospy.loginfo("[MAVROS:%s]Halting" % self.uav_name)
+            self.queue_paused = True
             return SUCCESS_ERR
 
         #**********************************************************************
@@ -288,6 +311,7 @@ class MavRosProxy:
         #**********************************************************************
         elif req.command == mavros.srv.CommandRequest.CMD_RESUME:
             rospy.loginfo("[MAVROS:%s]Resuming" % self.uav_name)
+            self.queue_paused = False
             return SUCCESS_ERR
 
         #**********************************************************************
@@ -349,7 +373,7 @@ class MavRosProxy:
         #   Clear our own internal list of waypoints
         #**********************************************************************
         rospy.loginfo("[MAVROS:%s]Clearing waypoints on MAV" % self.uav_name)
-        self.current_waypoints = []
+        self.waypoints = []
         return SUCCESS_ERR
             
     def get_waypoints_cb(self, req):
@@ -358,7 +382,7 @@ class MavRosProxy:
            Sends request for all waypoints from MAV, and waits for main thread
            to update the waypoint list
         """
-        return self.current_waypoints, SUCCESS_ERR
+        return self.waypoints, SUCCESS_ERR
 
     def set_waypoints_cb(self, req):
         """Callback implementing mavros/SetWaypoints service.
@@ -428,11 +452,11 @@ class MavRosProxy:
         #**********************************************************************
         #   Update our internal list of waypoints ready for transmission
         #**********************************************************************
-        self.current_waypoints = req.waypoints
+        self.waypoints = req.waypoints
         rospy.loginfo("[MAVROS:%s] waypoints transmitted successfully" %
                       self.uav_name)
-        rospy.loginfo("Waypoints are: %s" % self.current_waypoints)
-        rospy.loginfo("Number of waypoints: %d" % len(self.current_waypoints) )
+        rospy.loginfo("Waypoints are: %s" % self.waypoints)
+        rospy.loginfo("Number of waypoints: %d" % len(self.waypoints) )
         return SUCCESS_ERR
 
     def set_mission_cb(self, msg):
@@ -443,10 +467,10 @@ class MavRosProxy:
         #**********************************************************************
         rospy.loginfo("[MAVROS] Processing mission request %s" % msg)
         waypoint_defined = (0 <= msg.waypoint_id) and \
-            ( msg.waypoint_id < len(self.current_waypoints) )
+            ( msg.waypoint_id < len(self.waypoints) )
 
         # make special case for waypoint 0 when queue is empty
-        if 0==msg.waypoint_id and 0==len(self.current_waypoints):
+        if 0==msg.waypoint_id and 0==len(self.waypoints):
             waypoint_defined = True
 
         if not waypoint_defined:
@@ -486,19 +510,63 @@ class MavRosProxy:
                       self.set_mission_cb)
 
         #**********************************************************************
-        # Periodically send dummy current position
+        # Periodically send current position and state
         #**********************************************************************
-        latitude_delta = 0.0
         while not rospy.is_shutdown():
+
+            #******************************************************************
+            #   Wait for a bit
+            #******************************************************************
             rospy.sleep(0.2)
-            pos = mavros.msg.FilteredPosition()
-            pos.header.stamp = rospy.Time.now()
-            pos.latitude = 55.0 + latitude_delta
-            pos.longitude = -2.0
-            pos.altitude = 1.0
-            pos.relative_altitude = 1.0
-            self.pub_filtered_pos.publish(pos)
-            latitude_delta += 0.000001
+
+            #******************************************************************
+            #   Update and publish current state
+            #******************************************************************
+            self.state.num_of_waypoints = len(self.waypoints)
+
+            if 0 != len(self.waypoints) and \
+                self.state.current_waypoint < len(self.waypoints):
+
+                target = self.waypoints[self.state.current_waypoint]
+
+                if (not self.queue_paused) and target.autocontinue and \
+                    total_distance(self.pos,target) < target.radius:
+
+                    rospy.loginfo("MAVROS reached waypoint %d" % 
+                            self.state.current_waypoint)
+
+                    self.state.current_waypoint  = \
+                        (self.state.current_waypoint+1) % \
+                            len(self.waypoints)
+
+                    rospy.loginfo("Going to next waypoint %d" % 
+                            self.state.current_waypoint)
+
+            self.pub_state.publish(self.state)
+    
+            #******************************************************************
+            #   Calculate delta between current and target position (if any)
+            #******************************************************************
+            if 0==len(self.waypoints) or self.queue_paused:
+                latitude_delta = 0.0
+                longitude_delta = 0.0
+                altitude_delta = 0.0
+            else:
+                target = self.waypoints[self.state.current_waypoint]
+                latitude_delta = (target.x - self.pos.latitude) * 0.1
+                longitude_delta = (target.y - self.pos.longitude) * 0.1
+                altitude_delta = (target.z - self.pos.altitude) * 0.1
+
+            #******************************************************************
+            #   Move position toward current waypoint (if any) and publish
+            #******************************************************************
+            self.pos.header.stamp = rospy.Time.now()
+            self.pos.latitude += latitude_delta
+            self.pos.longitude += longitude_delta
+            self.pos.altitude += altitude_delta
+            self.pos.relative_altitude = altitude_delta
+            self.pub_filtered_pos.publish(self.pos)
+
 
 #******************************************************************************
 # Parse any arguments that follow the node command

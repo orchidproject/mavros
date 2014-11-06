@@ -455,7 +455,7 @@ class NavGUI:
         #   Construct waypoint at origin
         #**********************************************************************
         wp3 = mavros.msg.Waypoint()
-        wp3.autocontinue = False
+        wp3.autocontinue = True
         wp3.waitTime = rospy.Duration(secs=1.0)
         wp3.radius = 2.0
         wp3.frame = mavros.msg.Waypoint.FRAME_LOCAL

@@ -234,7 +234,7 @@ class Controller:
            Parameters
            msg - string to log
         """
-        rospy.loginfo(self.log_prefix + msg)
+        rospy.logdebug(self.log_prefix + msg)
 
     def __load_drone_params(self):
         """Loads drone parameters from ROS parameter server
@@ -388,10 +388,10 @@ class Controller:
         #**********************************************************************
         #   If our altitude is outside allowable waypoint range by reasonable
         #   margin of error - that's unsafe
+        #   Note: we don't check minimum altitude here, because we may be
+        #   in the process of landing or landed.
+        #   minimum altitude applies only to target waypoints
         #**********************************************************************
-        if self.drone_params[MIN_WAYPOINT_ALTITUDE_PARAM] > cur_pos.altitude:
-            return False
-
         if self.drone_params[MAX_WAYPOINT_ALTITUDE_PARAM] < cur_pos.altitude:
             return False
 
@@ -1100,7 +1100,6 @@ class Controller:
            would actually be achieved used mavlink MISSION_REACHED messages,
            but its not clear if the AR.Drone actually sends these.
         """
-
         #***********************************************************************
         #   Calculate number of waypoints completed since last state message
         #   received.
@@ -1108,6 +1107,8 @@ class Controller:
         #   waypoint before exiting successfully from this function.
         #***********************************************************************
         newly_completed = msg.current_waypoint - self.current_waypoint
+        self.__loginfo("new %d - old %d = %d" % 
+                (msg.current_waypoint, self.current_waypoint, newly_completed))
 
         #***********************************************************************
         #   If no new waypoints have been completed, then there is nothing
@@ -1119,8 +1120,19 @@ class Controller:
             return
 
         #***********************************************************************
-        #   If the current waypoint id is smaller than the last one, this
-        #   would imply that waypoints are not being followed in sequential
+        #   If the current waypoint has looped back to zero, we're done
+        #   so we should pause and restart the queue
+        #***********************************************************************
+        if msg.current_waypoint == 0:
+            self.__loginfo("Drone finished all waypoints")
+            self.__loginfo("clearing queue")
+            self.current_waypoint = 0
+            self.clear_queue_cb()
+            return
+
+        #***********************************************************************
+        #   If the current waypoint id is smaller than the last one,
+        #   this would imply that waypoints are not being followed in sequential
         #   order. Thus, we pause the queue and ask the user to sort out the
         #   mess.
         #***********************************************************************
@@ -1136,7 +1148,7 @@ class Controller:
         #   If we've allegedly completed more waypoints than we have queued,
         #   then something is probably wrong
         #***********************************************************************
-        if self.queue.qsize() <= newly_completed:
+        if len(self.waypoint_queue) <= newly_completed:
             self.__logerr("Drone appears to have completed more waypoints "
                     " than we told it to do. Either some other process is "
                     " controlling the drone, or we have bug.")
@@ -1150,7 +1162,8 @@ class Controller:
         #***********************************************************************
         if self.queue_is_paused:
             self.__logerr("Drone appears to have completed %d waypoints, even"
-                    " though queue is paused. Attempting to pause queue again")
+                    " though queue is paused. Attempting to pause queue again"
+                    % newly_completed)
             self.pause_queue_cb()
             return
 
