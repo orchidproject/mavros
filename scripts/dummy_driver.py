@@ -193,7 +193,7 @@ class MavRosProxy:
            Parameters:
            req -- mavros/RC message
         '''
-        rospy.loginfo("manual control input received")
+        rospy.logdebug("manual control input received")
 
     def get_params_cb(self, req):
         '''Callback for getting parameters from MAV
@@ -358,7 +358,6 @@ class MavRosProxy:
            Sends request for all waypoints from MAV, and waits for main thread
            to update the waypoint list
         """
-
         return self.current_waypoints, SUCCESS_ERR
 
     def set_waypoints_cb(self, req):

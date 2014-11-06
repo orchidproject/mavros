@@ -461,7 +461,7 @@ class NavGUI:
         wp3.frame = mavros.msg.Waypoint.FRAME_LOCAL
         wp3.x = 0.0
         wp3.y = 0.0
-        wp3.z = 0.0
+        wp3.z = 1.0
 
         #**********************************************************************
         #   Try to add waypoints to the queue

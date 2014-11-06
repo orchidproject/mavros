@@ -85,15 +85,15 @@ CURRENT_POSITION_TTL = rospy.Duration(secs=1.0)
 
 # Time To Live before target velocity is reset to zero. This is to prevent
 # UAV flying away when there is no active Remote Control input
-VELOCITY_TTL = rospy.Duration(secs=0.2)
+VELOCITY_TTL = rospy.Duration(secs=0.5)
 
 # How often to send RC commands to drone to control its velocity
 VELOCITY_UPDATE_RATE_IN_HERTZ = 10.0
 
 # Constants used for conversion between velocities (in range [-1,1]) and
 # RC channel inputs
-RC_ZERO_POINT = 1500  # RC input that indicates zero velocity
-RC_COEFFICIENT = 500  # 500*velocity+1500 = RC input
+RC_ZERO_POINT = 1500.0  # RC input that indicates zero velocity
+RC_COEFFICIENT = 500.0  # 500*velocity+1500 = RC input
 
 # Only the first 4 RC channels are used to control velocity.
 # The rest are ignored.
@@ -445,16 +445,24 @@ class Controller:
             
             # validate latitude (stored in coordinate x)
             if MIN_VALID_LATITUDE > waypoint.x:
+                self.__logerr("global waypoint %s has out of range latitude" %
+                    waypoint)
                 return False
 
             if MAX_VALID_LATITUDE < waypoint.x:
+                self.__logerr("global waypoint %s has out of range latitude" %
+                    waypoint)
                 return False
 
             # validate longitude (stored in coordinate y)
             if MIN_VALID_LONGITUDE > waypoint.y:
+                self.__logerr("global waypoint %s has out of range longitude" %
+                    waypoint)
                 return False
 
             if MAX_VALID_LONGITUDE < waypoint.y:
+                self.__logerr("global waypoint %s has out of range longitude" %
+                    waypoint)
                 return False
 
         #**********************************************************************
@@ -463,21 +471,29 @@ class Controller:
         elif msg.Waypoint.FRAME_LOCAL == waypoint.frame:
 
             if self.origin is None:
+                self.__logerr("local waypoint %s is invalid because origin "
+                        "is not set." % waypoint)
                 return False
 
         #**********************************************************************
         #   Disallow waypoints in any unsupported or undefined frame
         #**********************************************************************
         else:
+            self.__logerr("waypoint %s has unknown or undefined frame" %
+                    waypoint)
             return False
 
         #**********************************************************************
         #   Range check altitude (stored in z coordinate)
         #**********************************************************************
         if self.drone_params[MIN_WAYPOINT_ALTITUDE_PARAM] > waypoint.z:
+            self.__logerr("waypoint %s altitude is too low" %
+                    waypoint)
             return False
 
         if self.drone_params[MAX_WAYPOINT_ALTITUDE_PARAM] < waypoint.z:
+            self.__logerr("waypoint %s altitude is too high" %
+                    waypoint)
             return False
 
         #**********************************************************************
@@ -485,6 +501,8 @@ class Controller:
         #**********************************************************************
         safe_distance = self.drone_params[SAFE_FLIGHT_ZONE_RADIUS_PARAM]
         if safe_distance < total_distance(self.current_position,waypoint):
+            self.__logerr("waypoint %s is too far from current position" %
+                    waypoint)
             return False
 
         #**********************************************************************
@@ -492,6 +510,8 @@ class Controller:
         #**********************************************************************
         if self.origin is not None:
             if safe_distance < total_distance(self.origin,waypoint):
+                self.__logerr("waypoint %s is too far from origin" %
+                    waypoint)
                 return False
 
         #**********************************************************************
@@ -526,7 +546,7 @@ class Controller:
         #**********************************************************************
         #   Calculate total distance between points
         #**********************************************************************
-        distance = tools.total_distance(wp1,wp2)
+        distance = total_distance(wp1,wp2)
         if distance is None:
             self.__logerr("Internal error calculating distance between "
                     "waypoints. This shouldn't happen.")
@@ -590,7 +610,7 @@ class Controller:
 
             # put latitude and longitude in result
             result.x, result.y = to_latlon(utm_easting, utm_northing,
-                    self.origin.zone_num, self.origin.zone_letter)
+                    self.origin.zone_number, self.origin.zone_letter)
 
             # set coordinate frame to GLOBAL in the result
             result.frame = msg.Waypoint.FRAME_GLOBAL
@@ -1624,11 +1644,12 @@ class Controller:
         self.next_rc_timestamp = rospy.Time.now()
         for i in range(RC_VEL_START,RC_VEL_END):
             self.next_rc.channel[i] = \
-                vel.velocity[i]*RC_COEFFICENT + RC_ZERO_POINT
+                vel.velocity[i]*RC_COEFFICIENT + RC_ZERO_POINT
 
         #***********************************************************************
         #   Send immediately for good measure
         #***********************************************************************
+        self.__logdebug("received velocity - sending: %s" % self.next_rc)
         self.pub_rc.publish(self.next_rc)
 
     def start(self):
