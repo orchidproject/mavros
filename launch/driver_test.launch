@@ -7,7 +7,8 @@
   
   <rosparam file="$(find mavros)/drone_params.yaml" command="load" />
   <node pkg="mavros" type="driver.py" name="mavros_parrot" output="screen" args="-n Parrot -l $(arg address) -r" />
-  <node pkg="mavros" type="controller.py" name="mavros_control" output="screen"/>
+  <node pkg="mavros" type="controller.py" name="controller" output="screen"/>
+  <node pkg="mavros" type="nav_gui.py" name="gui_parrot" output="screen" args="-n Parrot -r" />
   <node pkg="rqt_runtime_monitor" type="rqt_runtime_monitor" name="diag_monitor"/>
 
 </launch>
