@@ -10,6 +10,11 @@ from mavros.msg import Error
 from math import radians, cos, sin, asin, sqrt
 
 #******************************************************************************
+# Tolerated difference between floats when testing for equality
+#******************************************************************************
+FLOAT_DIFF_TOLERANCE = 1.0e-10
+
+#******************************************************************************
 # Used for estimating distances between GPS waypoints
 #******************************************************************************
 RADIUS_OF_EARTH_IN_METRES = 6367 * 1000.0

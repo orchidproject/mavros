@@ -356,10 +356,15 @@ class MavRosProxy:
 
         #**********************************************************************
         #   Report useful state variables
+        #   To do: make custom mode name generic
         #**********************************************************************
-        status.add("base mode", self.state.base_mode)
-        status.add("custom mode", self.state.custom_mode)
-        status.add("MAV system status", self.state.system_status)
+        base_mode_name = get_base_mode_name(self.state.base_mode)
+        custom_mode_name = get_custom_mode_name("ARDrone",
+                self.state.custom_mode)
+        system_status_name = get_system_status_name(self.state.system_status)
+        status.add("base mode", base_mode_name)
+        status.add("custom mode", custom_mode_name)
+        status.add("MAV system status", system_status_name)
         status.add("last heartbeat: ", "%.2f" % 
                 time_since_last_heartbeat.to_sec())
 
@@ -552,11 +557,26 @@ class MavRosProxy:
                 return result
 
             #******************************************************************
-            #   Also ensure that it is set to the *right* value!
+            #   If it is set, compare float values with some tolerance
+            #******************************************************************
+            elif type(req.values[i]) is float:
+                requested_value = req.values[i]
+                drones_value = self.connection.params[ req.keys[i] ]
+                value_err = abs(requested_value - drones_value)
+
+                if value_err > FLOAT_DIFF_TOLERANCE:
+                    rospy.logwarn("[MAVROS:%s] Parameter %s has intolerable "
+                        "float error of %g." %
+                        (self.uav_name, req.keys[i], value_err))
+                    result.status = BAD_PARAM_VALUE_ERR
+                    return result
+
+            #******************************************************************
+            #   Compare non-floats for exact equality
             #******************************************************************
             elif req.values[i] != self.connection.params[ req.keys[i] ]:
-                rospy.logwarn("Parameter %s for %s has wrong value" %
-                              (req.keys[i], self.uav_name) )
+                rospy.logwarn("[MAVROS:%s] Parameter %s has wrong value on "
+                        "drone." % (self.uav_name, req.keys[i]) )
                 result.status = BAD_PARAM_VALUE_ERR
                 return result
 
