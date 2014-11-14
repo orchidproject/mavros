@@ -1585,7 +1585,7 @@ class Controller:
            mavros/Error message indicating if the command was sent successfully
         """
         request = srv.MAVCommandRequest()
-        request.command = srv.MAVCommandRequest.CMD_CUSTOM_MODE
+        request.command = srv.MAVCommandRequest.CMD_COMMAND
         request.custom = srv.MAVCommandRequest.CUSTOM_ARDONE_EMERGENCY
 
         try:
