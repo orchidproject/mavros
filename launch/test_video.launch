@@ -1,0 +1,14 @@
+<launch>
+  <arg name="address" default="192.168.1.2" />
+  <arg name="file" default="$(find ar2mav)/drones.yaml"/>
+  
+  <rosparam file="$(find mavros)/drone_params.yaml" command="load" />
+  <rosparam file="$(find ar2mav)/tweety_camera.yaml" command="load" ns="Parrot" />
+
+  <node pkg="ar2mav" type="video" name="Parrot_video"  output="screen" >
+	<param name="name" value="Parrot" />
+  </node>
+  <node pkg="image_transport" type="republish" name="publisher" args="x264 in:=/Parrot/video out:=/agent1/video" />
+  <node pkg="rqt_image_view" type="rqt_image_view" name="image_view" output="screen" />
+
+</launch>
