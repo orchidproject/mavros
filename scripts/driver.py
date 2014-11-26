@@ -106,12 +106,6 @@ UERE_CONSTANT = 45.5 / 9  # User equivalent range error?
 NE_CONSTANT = 1
 
 #******************************************************************************
-# Adhoc manual mode - apparently used to request manual control of MAVs that
-# might not support manual mode
-#******************************************************************************
-ADHOC_MANUAL = 99
-
-#******************************************************************************
 # How long to sleep during busy waits for communication.
 #
 # Ideally, we'd redesign the whole thing to suspend threads that are waiting
@@ -342,9 +336,16 @@ class MavRosProxy:
         """
 
         #**********************************************************************
+        #   Convenience reference to base and custom modes
+        #**********************************************************************
+        base_mode = self.state.base_mode
+        custom_mode = self.state.custom_mode
+
+        #**********************************************************************
         #   Decide what error status to return and fill in summary
         #**********************************************************************
         time_since_last_heartbeat = rospy.Time.now() - self.state.header.stamp
+        base_mode_name = get_base_mode_name(base_mode)
         if self.connection is None:
             status.summary(DIAG_WARN, "No connection yet with MAV.")
 
@@ -352,21 +353,40 @@ class MavRosProxy:
             status.summary(DIAG_STALE, "Connection with MAV gone stale")
 
         else:
-            status.summary(DIAG_OK, "OK")
+            status.summary(DIAG_OK, base_mode_name)
 
         #**********************************************************************
         #   Report useful state variables
         #   To do: make custom mode name generic
         #**********************************************************************
-        base_mode_name = get_base_mode_name(self.state.base_mode)
-        custom_mode_name = get_custom_mode_name("ARDrone",
-                self.state.custom_mode)
+        custom_mode_name = get_custom_mode_name("ARDrone", custom_mode)
         system_status_name = get_system_status_name(self.state.system_status)
         status.add("base mode", base_mode_name)
         status.add("custom mode", custom_mode_name)
         status.add("MAV system status", system_status_name)
         status.add("last heartbeat: ", "%.2f" % 
                 time_since_last_heartbeat.to_sec())
+
+        #**********************************************************************
+        #   Specify explicitly which mode flags are set
+        #**********************************************************************
+        preflight_enabled = is_preflight_mode_enabled(base_mode,custom_mode)
+        custom_enabled = is_custom_mode_enabled(base_mode,custom_mode)
+        auto_enabled = is_auto_mode_enabled(base_mode,custom_mode)
+        guided_enabled = is_guided_mode_enabled(base_mode,custom_mode)
+        stabilize_enabled = is_stabilize_mode_enabled(base_mode,custom_mode)
+        hil_enabled = is_hil_mode_enabled(base_mode,custom_mode)
+        manual_enabled = is_manual_mode_enabled(base_mode,custom_mode)
+        safety_enabled = is_safety_mode_enabled(base_mode,custom_mode)
+
+        status.add("preflight_enabled",preflight_enabled)
+        status.add("custom_enabled",custom_enabled)
+        status.add("auto_enabled",auto_enabled)
+        status.add("guided_enabled",guided_enabled)
+        status.add("stabilize_enabled",stabilize_enabled)
+        status.add("hil_enabled",hil_enabled)
+        status.add("manual_enabled",manual_enabled)
+        status.add("safety_enabled",safety_enabled)
 
         return status
 
@@ -600,7 +620,7 @@ class MavRosProxy:
         #**********************************************************************
         #   Execute Takeoff
         #**********************************************************************
-        if req.command == mavros.srv.CommandRequest.CMD_TAKEOFF:
+        if req.command == mavros.srv.MAVCommandRequest.CMD_TAKEOFF:
             if "LAND" not in self.connection.mode_mapping().keys():
                 rospy.logwarn("[MAVROS:%s]This vehicle can not fly." %
                               self.uav_name)
@@ -628,7 +648,7 @@ class MavRosProxy:
         #**********************************************************************
         #   Execute Land
         #**********************************************************************
-        elif req.command == mavros.srv.CommandRequest.CMD_LAND:
+        elif req.command == mavros.srv.MAVCommandRequest.CMD_LAND:
             if "LAND" not in self.connection.mode_mapping().keys():
                 rospy.logwarn("[MAVROS:%s]This vehicle can not fly." %
                               self.uav_name)
@@ -654,7 +674,7 @@ class MavRosProxy:
         #**********************************************************************
         #   Halt at current position
         #**********************************************************************
-        elif req.command == mavros.srv.CommandRequest.CMD_HALT:
+        elif req.command == mavros.srv.MAVCommandRequest.CMD_HALT:
             # self.connection.mav.mission_set_current_send(
             #   self.connection.target_system,
             #   self.connection.target_component, 0)
@@ -669,7 +689,7 @@ class MavRosProxy:
         #**********************************************************************
         #   Resume waypoints after halt
         #**********************************************************************
-        elif req.command == mavros.srv.CommandRequest.CMD_RESUME:
+        elif req.command == mavros.srv.MAVCommandRequest.CMD_RESUME:
             self.connection.mav.command_long_send(self.connection.target_system,
                                         0,
                                         mav.MAV_CMD_OVERRIDE_GOTO,
@@ -682,7 +702,7 @@ class MavRosProxy:
         #**********************************************************************
         #   Execute custom command
         #**********************************************************************
-        elif req.command == mavros.srv.CommandRequest.CMD_COMMAND:
+        elif req.command == mavros.srv.MAVCommandRequest.CMD_COMMAND:
             self.connection.mav.command_long_send(self.connection.target_system,
                                          self.connection.target_component,
                                          req.custom, 1, 0, 0, 0, 0, 0, 0, 0)
@@ -691,7 +711,7 @@ class MavRosProxy:
         #**********************************************************************
         #   Change mode to manual
         #**********************************************************************
-        elif req.command == mavros.srv.CommandRequest.CMD_MANUAL:
+        elif req.command == mavros.srv.MAVCommandRequest.CMD_MANUAL:
             if "MANUAL" not in self.connection.mode_mapping().keys():
                 rospy.logwarn(
                     "[MAVROS:%s]This vehicle might not support manual" %
@@ -718,7 +738,7 @@ class MavRosProxy:
         #**********************************************************************
         #   Change mode to auto
         #**********************************************************************
-        elif req.command == mavros.srv.CommandRequest.CMD_AUTO:
+        elif req.command == mavros.srv.MAVCommandRequest.CMD_AUTO:
             if "AUTO" not in self.connection.mode_mapping().keys():
                 rospy.loginfo("[MAVROS:%s]This vehicle does not have auto."
                               " Sending mission start..." % self.uav_name)
@@ -744,7 +764,7 @@ class MavRosProxy:
         #**********************************************************************
         #   Change base mode
         #**********************************************************************
-        elif req.command == mavros.srv.CommandRequest.CMD_BASE_MODE:
+        elif req.command == mavros.srv.MAVCommandRequest.CMD_BASE_MODE:
             self.connection.mav.set_mode_send(self.connection.target_system,
                                               req.custom, 0)
             rospy.loginfo("[MAVROS:%s]Base mode(%s)..." %
@@ -754,7 +774,7 @@ class MavRosProxy:
         #**********************************************************************
         #   Change custom mode
         #**********************************************************************
-        elif req.command == mavros.srv.CommandRequest.CMD_CUSTOM_MODE:
+        elif req.command == mavros.srv.MAVCommandRequest.CMD_CUSTOM_MODE:
             self.connection.mav.set_mode_send(self.connection.target_system,
                                          mav.MAV_MODE_FLAG_CUSTOM_MODE_ENABLED,
                                          req.custom)
@@ -765,7 +785,7 @@ class MavRosProxy:
         #**********************************************************************
         #   Clear waypoints
         #**********************************************************************
-        elif req.command == mavros.srv.CommandRequest.CMD_CLEAR_WAYPOINTS:
+        elif req.command == mavros.srv.MAVCommandRequest.CMD_CLEAR_WAYPOINTS:
             return self.clear_waypoints_cmd()
 
         #**********************************************************************
