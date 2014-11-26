@@ -69,7 +69,7 @@
 #******************************************************************************
 # Standard Imports
 #******************************************************************************
-import sys, os, math, tf
+import sys, os, math
 from socket import error
 from math import sqrt
 
