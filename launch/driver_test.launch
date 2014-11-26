@@ -1,4 +1,5 @@
 <launch>
+  <include file="$(find mavros)/launch/video.launch" />
   <arg name="address" default="192.168.1.2" />
   <arg name="file" default="$(find ar2mav)/drones.yaml"/>
   
