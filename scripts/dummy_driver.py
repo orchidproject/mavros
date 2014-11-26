@@ -283,7 +283,7 @@ class MavRosProxy:
         #**********************************************************************
         #   Execute Takeoff
         #**********************************************************************
-        if req.command == mavros.srv.CommandRequest.CMD_TAKEOFF:
+        if req.command == mavros.srv.MAVCommandRequest.CMD_TAKEOFF:
             rospy.loginfo("[MAVROS:%s]Takeoff" % self.uav_name)
             self.pos.altitude = 1.0  # AR.Drone reports this when on ground
             self.pos.relative_altitude = 1.0
@@ -292,7 +292,7 @@ class MavRosProxy:
         #**********************************************************************
         #   Execute Land
         #**********************************************************************
-        elif req.command == mavros.srv.CommandRequest.CMD_LAND:
+        elif req.command == mavros.srv.MAVCommandRequest.CMD_LAND:
             rospy.loginfo("[MAVROS:%s]Landing" % self.uav_name)
             self.pos.altitude = 0.4  # AR.Drone reports this when on ground
             self.pos.relative_altitude = 0.4
@@ -301,7 +301,7 @@ class MavRosProxy:
         #**********************************************************************
         #   Halt at current position
         #**********************************************************************
-        elif req.command == mavros.srv.CommandRequest.CMD_HALT:
+        elif req.command == mavros.srv.MAVCommandRequest.CMD_HALT:
             rospy.loginfo("[MAVROS:%s]Halting" % self.uav_name)
             self.queue_paused = True
             return SUCCESS_ERR
@@ -309,7 +309,7 @@ class MavRosProxy:
         #**********************************************************************
         #   Resume waypoints after halt
         #**********************************************************************
-        elif req.command == mavros.srv.CommandRequest.CMD_RESUME:
+        elif req.command == mavros.srv.MAVCommandRequest.CMD_RESUME:
             rospy.loginfo("[MAVROS:%s]Resuming" % self.uav_name)
             self.queue_paused = False
             return SUCCESS_ERR
@@ -317,42 +317,42 @@ class MavRosProxy:
         #**********************************************************************
         #   Execute custom command
         #**********************************************************************
-        elif req.command == mavros.srv.CommandRequest.CMD_COMMAND:
+        elif req.command == mavros.srv.MAVCommandRequest.CMD_COMMAND:
             rospy.loginfo("[MAVROS:%s]Executing command" % self.uav_name)
             return SUCCESS_ERR
 
         #**********************************************************************
         #   Change mode to manual
         #**********************************************************************
-        elif req.command == mavros.srv.CommandRequest.CMD_MANUAL:
+        elif req.command == mavros.srv.MAVCommandRequest.CMD_MANUAL:
             rospy.loginfo("[MAVROS:%s]Now in manual" % self.uav_name)
             return SUCCESS_ERR
 
         #**********************************************************************
         #   Change mode to auto
         #**********************************************************************
-        elif req.command == mavros.srv.CommandRequest.CMD_AUTO:
+        elif req.command == mavros.srv.MAVCommandRequest.CMD_AUTO:
             rospy.loginfo("[MAVROS:%s]Now in auto" % self.uav_name)
             return SUCCESS_ERR
 
         #**********************************************************************
         #   Change base mode
         #**********************************************************************
-        elif req.command == mavros.srv.CommandRequest.CMD_BASE_MODE:
+        elif req.command == mavros.srv.MAVCommandRequest.CMD_BASE_MODE:
             rospy.loginfo("[MAVROS:%s] changed base mode" % self.uav_name)
             return SUCCESS_ERR
 
         #**********************************************************************
         #   Change custom mode
         #**********************************************************************
-        elif req.command == mavros.srv.CommandRequest.CMD_CUSTOM_MODE:
+        elif req.command == mavros.srv.MAVCommandRequest.CMD_CUSTOM_MODE:
             rospy.loginfo("[MAVROS:%s] changed custom mode" % self.uav_name)
             return SUCCESS_ERR
 
         #**********************************************************************
         #   Clear waypoints
         #**********************************************************************
-        elif req.command == mavros.srv.CommandRequest.CMD_CLEAR_WAYPOINTS:
+        elif req.command == mavros.srv.MAVCommandRequest.CMD_CLEAR_WAYPOINTS:
             return self.clear_waypoints_cmd()
 
         #**********************************************************************
