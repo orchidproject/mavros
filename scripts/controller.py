@@ -67,6 +67,7 @@ from uav_utils.sweeps import spiral_sweep, rect_sweep
 import mavros.srv as srv
 import mavros.msg as msg
 from tools import *
+from modes import is_emergency_enabled, is_manual_mode_enabled
 
 #*******************************************************************************
 #   Constants
@@ -1090,13 +1091,53 @@ class Controller:
         #**********************************************************************
         self.current_position_timestamp = msg.header.stamp
 
+    def update_uav_mode(self,msg):
+        """Keeps controller up-to-date with the state that the UAV is
+           actually in.
+
+           Parameters
+           msg - mavros/State message - which includes information about
+           UAV mode and state
+        """
+
+        #***********************************************************************
+        #   If the system is in Emergency mode, then so should we be
+        #***********************************************************************
+        if is_emergency_enabled(msg.system_status):
+            self.uav_mode = srv.SetModeRequest.EMERGENCY
+
+        #***********************************************************************
+        #   Otherwise, if manual is enabled, we're in manual mode
+        #***********************************************************************
+        elif is_manual_mode_enabled(msg.base_mode,msg.custom_mode):
+            self.uav_mode = srv.SetModeRequest.MANUAL
+
+        #***********************************************************************
+        #   Anything else we currently count as auto. In the case of
+        #   an AR.Drone being controlled through arproxy, this just means
+        #   we're talking directly to the Parrot mavlink implementation,
+        #   which we basically take to mean we're in auto.
+        #***********************************************************************
+        else:
+            self.uav_mode = srv.SetModeRequest.AUTO
+
+
     def driver_state_cb(self,msg):
         """Callback for driver state messages
 
            Used to figure out when waypoints have been completed. Ideally this
            would actually be achieved used mavlink MISSION_REACHED messages,
            but its not clear if the AR.Drone actually sends these.
+
+           Also ensures that the UAV mode (AUTO/MANUAL/EMERGENCY) is up-to-date
         """
+
+        #***********************************************************************
+        #   Before dealing with waypoint stuff, make sure the UAV state
+        #   is in line with what the UAV is reporting.
+        #***********************************************************************
+        self.update_uav_mode(msg)
+
         #***********************************************************************
         #   Calculate number of waypoints completed since last state message
         #   received.
@@ -1247,14 +1288,14 @@ class Controller:
         #***********************************************************************
         if srv.SetModeRequest.UNKNOWN == req.mode:
             self.__logwarn("Ignoring request to enter UNKNOWN control mode")
-            return
+            return UNSUPPORTED_MODE_ERR
 
         #***********************************************************************
         #   If no change in mode is requested, then there is nothing to do
         #***********************************************************************
         if self.uav_mode == req.mode:
             self.__loginfo("Drone is already in requested mode: %d" % req.mode)
-            return
+            return SUCCESS_ERR
 
         #***********************************************************************
         #   Ask drone to enter EMERGENCY mode (implemented as custom mavlink

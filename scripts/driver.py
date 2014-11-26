@@ -713,7 +713,7 @@ class MavRosProxy:
         #**********************************************************************
         elif req.command == mavros.srv.MAVCommandRequest.CMD_MANUAL:
             if "MANUAL" not in self.connection.mode_mapping().keys():
-                rospy.logwarn(
+                rospy.logdebug(
                     "[MAVROS:%s]This vehicle might not support manual" %
                     self.uav_name + str(ADHOC_MANUAL))
                 mode = ADHOC_MANUAL
@@ -737,6 +737,10 @@ class MavRosProxy:
 
         #**********************************************************************
         #   Change mode to auto
+        #   Note: This code is probably not generic or cross platform at all
+        #   Currently, we take auto to manual mode with arproxy - which means
+        #   we are taking to the AR.Drone mavlink implementation directly,
+        #   and could be in any mode really.
         #**********************************************************************
         elif req.command == mavros.srv.MAVCommandRequest.CMD_AUTO:
             if "AUTO" not in self.connection.mode_mapping().keys():
@@ -751,8 +755,8 @@ class MavRosProxy:
                                         mav.MAV_MODE_FLAG_CUSTOM_MODE_ENABLED,
                                         self.connection.mode_mapping()["AUTO"])
             rospy.sleep(BUSY_WAIT_INTERVAL)
-            while self.state.custom_mode != \
-                  self.connection.mode_mapping()["AUTO"]:
+            while is_manual_mode_enabled(self.state.base_mode,
+                    self.state.custom_mode):
                 if rospy.Time.now() - start_time > self.command_timeout:
                     rospy.logwarn("[MAVROS:%s]Timeout while going to AUTO..." %
                                   self.uav_name)

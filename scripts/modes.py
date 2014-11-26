@@ -38,6 +38,14 @@ def get_system_status_name(system_state_id):
     else:
        return "Unknown state: %d" % system_state_id
 
+def is_emergency_enabled(system_state_id):
+    """Returns true of the system is in emergency mode
+    """
+    if system_state_id == mavlink.MAV_STATE_EMERGENCY:
+        return True
+    else:
+        return False
+
 #******************************************************************************
 #   Base mode mapping extracted from mavlink 
 #******************************************************************************
