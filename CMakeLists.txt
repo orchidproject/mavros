@@ -55,6 +55,7 @@ add_message_files(
   RC.msg
   State.msg
   Status.msg
+  Mode.msg
   Velocity.msg
   Waypoint.msg
   MapPoint.msg

@@ -37,6 +37,7 @@
     /diagnostics - provides status information via the ROS diagnostics package
     /all/control/set_origin - broadcasts new origin for all UAVs (see below)
     /uav_name/manual_control - Used to control UAV velocity in manual mode
+    /uav_name/control/mode - Periodically broadcasts current Controller mode
 
     Subscriptions
     -------------
@@ -71,6 +72,9 @@ from tools import *
 #*******************************************************************************
 #   Constants
 #*******************************************************************************
+
+# Frequency with which to broadcast current control mode
+MODE_BROADCAST_FREQ = rospy.Duration(secs=1.0)
 
 # prefix for things subscribed to by all UAV controllers
 MULTI_UAV_CONTROL_PREFIX = "/all/control/"
@@ -153,7 +157,7 @@ class Controller:
         self.log_prefix = "[CONTROL %s] " % uav_name
 
         # current mode we believe the drone is in
-        self.uav_mode = srv.SetModeRequest.UNKNOWN
+        self.uav_mode = msg.Mode.UNKNOWN
 
         # queue of waypoints still to be executed
         self.waypoint_queue = []
@@ -665,7 +669,7 @@ class Controller:
         #   waypoints, so as a precaution, tell it to stop what its doing
         #   before sending waypoints.
         #**********************************************************************
-        if self.uav_mode == srv.SetModeRequest.AUTO:
+        if self.uav_mode == msg.Mode.AUTO:
             halt_response = self.__halt_drone()
             if SUCCESS_ERR != halt_response:
                 self.__logerr("Failed to halt drone before sending "
@@ -755,7 +759,7 @@ class Controller:
         #**********************************************************************
         #   Make sure we're in AUTO mode
         #**********************************************************************
-        if self.uav_mode != srv.SetModeRequest.AUTO:
+        if self.uav_mode != msg.Mode.AUTO:
             self.__logerr("Can't execute mission on drone unless we know "
                     "its in AUTO mode. Please set mode explicitly first.")
             return UNSUPPORTED_COMMAND_ERR
@@ -800,7 +804,7 @@ class Controller:
         #**********************************************************************
         #   Make sure we're in AUTO mode
         #**********************************************************************
-        if self.uav_mode != srv.SetModeRequest.AUTO:
+        if self.uav_mode != msg.Mode.AUTO:
             self.__logwarn("Can't halt drone unless we know its in AUTO mode."
                     " Please set mode explicitly first.")
             return UNSUPPORTED_COMMAND_ERR
@@ -935,6 +939,9 @@ class Controller:
         self.pub_rc = rospy.Publisher(self.driver_prefix + \
             "manual_control", msg.RC, queue_size=1)
 
+        self.pub_mode = rospy.Publisher(self.control_prefix + "mode",
+                msg.Mode, queue_size=1)
+
         #**********************************************************************
         #   Setup ROS diagnostics updater
         #**********************************************************************
@@ -1029,20 +1036,20 @@ class Controller:
         #**********************************************************************
         #   Generate useful diagnostics about current UAV Mode
         #**********************************************************************
-        if srv.SetModeRequest.UNKNOWN == self.uav_mode:  
+        if msg.Mode.UNKNOWN == self.uav_mode:  
             mode_status = "UNKNOWN"
             summary_string = summary_string + "UAV mode unknown. "
             error_level = max(error_level,DIAG_WARN)
 
-        elif srv.SetModeRequest.AUTO == self.uav_mode:
+        elif msg.Mode.AUTO == self.uav_mode:
             mode_status = "AUTO"
             summary_string = summary_string + "UAV in AUTO. "
 
-        elif srv.SetModeRequest.MANUAL == self.uav_mode:
+        elif msg.Mode.MANUAL == self.uav_mode:
             mode_status = "MANUAL"
             summary_string = summary_string + "UAV in MANUAL. "
 
-        elif srv.SetModeRequest.EMERGENCY == self.uav_mode:
+        elif msg.Mode.EMERGENCY == self.uav_mode:
             mode_status = "EMERGENCY"
             summary_string = summary_string + "UAV in EMERGENCY! "
             error_level = max(error_level,DIAG_WARN)
@@ -1066,6 +1073,11 @@ class Controller:
         #**********************************************************************
         status.summary(error_level, summary_string)
         return status
+
+    def broadcast_mode(self, event=None):
+        """Used to periodically broadcast current controller mode"""
+        mode_msg = msg.Mode(mode=self.uav_mode)
+        self.pub_mode.publish(mode_msg)
 
     def update_diagnostics(self, event=None):
         """Used to periodically update ROS diagnostics"""
@@ -1245,7 +1257,7 @@ class Controller:
         #   before comparing against current mode --- which is initialised
         #   to UNKNOWN, but should never be set to UNKNOWN on request
         #***********************************************************************
-        if srv.SetModeRequest.UNKNOWN == req.mode:
+        if msg.Mode.UNKNOWN == req.mode:
             self.__logwarn("Ignoring request to enter UNKNOWN control mode")
             return
 
@@ -1260,13 +1272,13 @@ class Controller:
         #   Ask drone to enter EMERGENCY mode (implemented as custom mavlink
         #   mode).
         #***********************************************************************
-        if req.mode == srv.SetModeRequest.EMERGENCY:
+        if req.mode == msg.Mode.EMERGENCY:
             return self.emergency_cb()  # delegate to emergency callback
 
         #***********************************************************************
         #   Ask drone to enter MANUAL mode
         #***********************************************************************
-        if req.mode == srv.SetModeRequest.MANUAL:
+        if req.mode == msg.Mode.MANUAL:
 
             # As precaution, reset target velocity to zero now, to ensure
             # UAV doesn't fly off
@@ -1288,7 +1300,7 @@ class Controller:
 
             # if we get that far, return error status from driver
             if SUCCESS_ERR == response.status:
-                self.uav_mode = srv.SetModeRequest.MANUAL
+                self.uav_mode = msg.Mode.MANUAL
             else:
                 self.__logerr("Drone failed to enter manual mode")
             return response.status
@@ -1296,7 +1308,7 @@ class Controller:
         #***********************************************************************
         #   Ask drone to enter AUTO mode
         #***********************************************************************
-        if req.mode == srv.SetModeRequest.AUTO:
+        if req.mode == msg.Mode.AUTO:
             request = srv.MAVCommandRequest()
             request.command = srv.MAVCommandRequest.CMD_AUTO
             request.custom = srv.MAVCommandRequest.CUSTOM_NO_OP
@@ -1309,7 +1321,7 @@ class Controller:
                 return SERVICE_CALL_FAILED_ERR
 
             if SUCCESS_ERR == response.status:
-                self.uav_mode = srv.SetModeRequest.AUTO
+                self.uav_mode = msg.Mode.AUTO
             else:
                 self.__logerr("Drone failed to enter auto mode")
             return response.status
@@ -1465,7 +1477,7 @@ class Controller:
         #   If the drone is in AUTO mode --- ask it to stop execution
         #***********************************************************************
         status = SUCCESS_ERR  # error flag to return to caller
-        if srv.SetModeRequest.AUTO == self.uav_mode:
+        if msg.Mode.AUTO == self.uav_mode:
             self.__loginfo("Trying to halt drone.")
             status = self.__halt_drone()
             if SUCCESS_ERR != status:
@@ -1489,7 +1501,7 @@ class Controller:
         #***********************************************************************
         #   Only really meaningful to resume queue if drone is in AUTO mode
         #***********************************************************************
-        if srv.SetModeRequest.AUTO != self.uav_mode:
+        if msg.Mode.AUTO != self.uav_mode:
             self.__logwarn("Can only resume queue while drone is in AUTO mode")
             return UNSUPPORTED_COMMAND_ERR
 
@@ -1596,7 +1608,7 @@ class Controller:
             return SERVICE_CALL_FAILED_ERR
 
         if SUCCESS_ERR == response.status:
-            self.uav_mode = srv.SetModeRequest.EMERGENCY
+            self.uav_mode = msg.Mode.EMERGENCY
             self.__logwarn("Drone now in emergency mode.")
         else:
             self.__logerr("Drone failed to enter emergency mode")
@@ -1666,7 +1678,7 @@ class Controller:
         #***********************************************************************
         #   Only accept velocity changes if we're in manual mode
         #***********************************************************************
-        if srv.SetModeRequest.MANUAL != self.uav_mode:
+        if msg.Mode.MANUAL != self.uav_mode:
             self.__logwarn("Velocities only accepted in manual mode")
             return
 
@@ -1715,9 +1727,11 @@ class Controller:
         self.clear_queue_cb()
 
         #**********************************************************************
-        #   Start diagnostics running
+        #   Start periodically publishing diagnostics and current control
+        #   mode.
         #**********************************************************************
         diag_timer = rospy.Timer(DIAG_UPDATE_FREQ, self.update_diagnostics)
+        mode_timer = rospy.Timer(MODE_BROADCAST_FREQ, self.broadcast_mode)
 
         #***********************************************************************
         #   Main loop - continue executing until we're interrupted
@@ -1736,7 +1750,7 @@ class Controller:
             #********************************************************************
             #   If we're in manual mode, publish target velocity periodically
             #********************************************************************
-            if srv.SetModeRequest.MANUAL == self.uav_mode:
+            if msg.Mode.MANUAL == self.uav_mode:
                 self.pub_rc.publish(self.next_rc)
 
             #********************************************************************
