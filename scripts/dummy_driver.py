@@ -106,12 +106,6 @@ UERE_CONSTANT = 45.5 / 9  # User equivalent range error?
 NE_CONSTANT = 1
 
 #******************************************************************************
-# Adhoc manual mode - apparently used to request manual control of MAVs that
-# might not support manual mode
-#******************************************************************************
-ADHOC_MANUAL = 99
-
-#******************************************************************************
 # How long to sleep during busy waits for communication.
 #
 # Ideally, we'd redesign the whole thing to suspend threads that are waiting
@@ -158,7 +152,6 @@ class MavRosProxy:
         self.queue_paused = True
 
         # Simulated UAV state
-        # (only care about current waypoint and number of waypoints)
         self.state = mavros.msg.State()
         self.state.base_mode = 0
         self.state.custom_mode = 0
@@ -269,6 +262,16 @@ class MavRosProxy:
         result.status = SUCCESS_ERR
         return result
 
+    def toggle_emergency(self):
+        """Toggles the emergency state between ON and OFF
+
+           This simulates behaviour of AR.DRONE
+        """
+        if SYSTEM_STATES["EMERGENCY"]==self.state.system_status:
+            self.state.system_status = 0
+        else:
+            self.state.system_status = SYSTEM_STATES["EMERGENCY"]
+
     def mav_command_cb(self, req):
         """Callback for sending MAV commands
 
@@ -319,12 +322,19 @@ class MavRosProxy:
         #**********************************************************************
         elif req.command == mavros.srv.MAVCommandRequest.CMD_COMMAND:
             rospy.loginfo("[MAVROS:%s]Executing command" % self.uav_name)
+            # if the command is to toggle the emergency state, the we do that
+            # otherwise we ignore
+            if req.custom == \
+                mavros.srv.MAVCommandRequest.CUSTOM_ARDONE_EMERGENCY:
+                self.toggle_emergency()
             return SUCCESS_ERR
 
         #**********************************************************************
         #   Change mode to manual
         #**********************************************************************
         elif req.command == mavros.srv.MAVCommandRequest.CMD_MANUAL:
+            self.state.base_mode = mav.MAV_MODE_FLAG_CUSTOM_MODE_ENABLED
+            self.state.custom_mode = ADHOC_MANUAL
             rospy.loginfo("[MAVROS:%s]Now in manual" % self.uav_name)
             return SUCCESS_ERR
 
@@ -332,6 +342,8 @@ class MavRosProxy:
         #   Change mode to auto
         #**********************************************************************
         elif req.command == mavros.srv.MAVCommandRequest.CMD_AUTO:
+            self.state.base_mode = 0
+            self.state.custom_mode = 0
             rospy.loginfo("[MAVROS:%s]Now in auto" % self.uav_name)
             return SUCCESS_ERR
 
