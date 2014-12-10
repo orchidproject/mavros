@@ -23,6 +23,9 @@
     /uav_name/control/resume_queue, resumes the waypoint queue if paused
     /uav_name/control/add_waypoints, adds the specified waypoints to the queue
 
+    /uav_name/control/flat_trim,  tell drone its on level surface
+    /uav_name/control/calibrate_magnetometer, what it says on tin
+
     /uav_name/control/land, commands the UAV to land
     /uav_name/control/takeoff, commands the UAV to takeoff
 
@@ -893,6 +896,12 @@ class Controller:
         rospy.Service(self.control_prefix + "takeoff", srv.SimpleCommand,
             self.takeoff_cb)
 
+        rospy.Service(self.control_prefix + "flat_trim", srv.SimpleCommand,
+            self.flat_trim_cb)
+
+        rospy.Service(self.control_prefix + "calibrate_magnetometer",
+            srv.SimpleCommand, self.calibrate_magnetometer_cb)
+
         rospy.Service(self.control_prefix + "add_waypoints", srv.AddWaypoints,
             self.add_waypoints_cb)
 
@@ -1626,6 +1635,60 @@ class Controller:
            self.__logerr("Failed to send takeoff request")
         else:
             self.__loginfo("Takeoff request sent successfully.")
+        return response.status
+
+    def calibrate_magnetometer_cb(self,req=None):
+        """Callback for telling the drone to calibrate magnetometer
+
+           Parameters
+           req - is an empty service request (no input required)
+
+           Returns
+           mavros/Error message indicating if the command was sent successfully
+        """
+        request = srv.MAVCommandRequest()
+        request.command = srv.MAVCommandRequest.CMD_COMMAND
+        request.custom = srv.MAVCommandRequest.CUSTOM_ARDONE_CALIBRATE_MAGNETOMETER
+
+        try:
+            response = self.mav_command_srv(request)
+        except rospy.ServiceException as e:
+            self.__logerr("MAVCommand service threw exception while trying"
+                " to calibrate magnetometer: %s" % e)
+            return SERVICE_CALL_FAILED_ERR
+
+        if SUCCESS_ERR == response.status:
+            self.__loginfo("Drone magnetometer now calibrated.")
+        else:
+            self.__logerr("Drone failed to calibrate magnetometer.")
+
+        return response.status
+
+    def flat_trim_cb(self,req=None):
+        """Callback for telling the drone to flat trim
+
+           Parameters
+           req - is an empty service request (no input required)
+
+           Returns
+           mavros/Error message indicating if the command was sent successfully
+        """
+        request = srv.MAVCommandRequest()
+        request.command = srv.MAVCommandRequest.CMD_COMMAND
+        request.custom = srv.MAVCommandRequest.CUSTOM_ARDONE_FLAT_TRIM
+
+        try:
+            response = self.mav_command_srv(request)
+        except rospy.ServiceException as e:
+            self.__logerr("MAVCommand service threw exception while trying"
+                " to flat trim: %s" % e)
+            return SERVICE_CALL_FAILED_ERR
+
+        if SUCCESS_ERR == response.status:
+            self.__loginfo("Drone flat trimmed.")
+        else:
+            self.__logerr("Drone failed to flat trim")
+
         return response.status
 
     def emergency_cb(self,req=None):

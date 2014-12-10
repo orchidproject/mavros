@@ -16,5 +16,7 @@ uint8 CMD_RESUME = 21
 # known custom ids
 uint8 CUSTOM_NO_OP = 0  # has no effect
 uint8 CUSTOM_ARDONE_EMERGENCY = 100  # emergency mode recognised by Parrot
+uint8 CUSTOM_ARDONE_FLAT_TRIM = 101  # perform flat trim - ONLY DO THIS WHILE LANDED
+uint8 CUSTOM_ARDONE_CALIBRATE_MAGNETOMETER = 102  # calibrate magnetometer ONLY DO THIS IN THE AIR
 ---
 uint8 status
