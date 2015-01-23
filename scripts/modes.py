@@ -244,9 +244,15 @@ def is_manual_mode_enabled(base_mode,custom_mode):
        base_mode - system base mode bit field (as integer)
        custom_mode - custom mode bit field (as integer)
     """
-    if base_mode & mavlink.MAV_MODE_FLAG_MANUAL_INPUT_ENABLED:
-        return True
-    elif is_adhoc_manual_mode_enabled(base_mode,custom_mode):
+    # Manual flag is set by AR.Drone alongside AUTO flag.
+    # In general, these flags are not mutually exclusive, but
+    # we assume that they are! Thus, for now, we only consider
+    # manual control to be enabled when the ARProxy software
+    # is in its special adhoc manual mode, and redirecting
+    # control input to the Parrot API
+    #if base_mode & mavlink.MAV_MODE_FLAG_MANUAL_INPUT_ENABLED:
+        #return True
+    if is_adhoc_manual_mode_enabled(base_mode,custom_mode):
         return True
     else:
         return False
