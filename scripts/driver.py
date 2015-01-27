@@ -1420,6 +1420,8 @@ class MavRosProxy:
             elif msg_type == "MISSION_CURRENT":
                 self.state.current_waypoint = msg.seq
                 self.last_current_wp_report_time = rospy.Time.now()
+                rospy.loginfo("[MAVROS:%s] Current mission reported: %d" % \
+                              (self.uav_name, msg.seq))
 
             elif msg_type == "MISSION_ITEM":
                 self.handle_waypoint_from_mav(msg)
@@ -1445,7 +1447,7 @@ class MavRosProxy:
 
             elif msg_type == "STATUSTEXT":
                 rospy.loginfo("[MAVROS:%s]STATUSTEXT: Status severity is %d. "
-                              "Text Message is %s" % 
+                              "Text Message is %s" %  \
                               (self.uav_name, msg.severity, msg.text))
 
             elif msg_type == "PARAM_VALUE":
@@ -1459,7 +1461,7 @@ class MavRosProxy:
             #******************************************************************
             elif msg_type == "VFR_HUD":
                 rospy.logdebug("[MAVROS:%s] Ignoring %s message -- we don't"
-                               " care to process these right now." %
+                               " care to process these right now." % \
                                (self.uav_name, str(msg_type)))
 
             #******************************************************************
@@ -1467,7 +1469,7 @@ class MavRosProxy:
             # expect to receive
             #******************************************************************
             else:
-                rospy.loginfo("[MAVROS:%s] Received %s message." %
+                rospy.loginfo("[MAVROS:%s] Received %s message." % \
                               (self.uav_name, str(msg_type)))
 
 
