@@ -1583,6 +1583,7 @@ class Controller:
         if SUCCESS_ERR != status:
             self.queue_is_paused = True
             self.__logerr("Could not execute mission on drone. Pausing Queue.")
+        self.__loginfo("Queue resumed.")
         return status
 
     def land_cb(self,req=None):
