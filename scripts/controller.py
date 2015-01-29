@@ -385,9 +385,7 @@ class Controller:
         #   If position is all zeros, we can pretty sure we don't have a
         #   a GPS lock, so we'll assume this is unsafe
         #**********************************************************************
-        if 0.0 == cur_pos.latitude and 0.0 == cur_pos.longitude and \
-            0.0 == cur_pos.altitude:
-
+        if 0.0 == cur_pos.latitude and 0.0 == cur_pos.longitude:
             return False
 
         #**********************************************************************
@@ -1125,6 +1123,8 @@ class Controller:
         #   If the system is in Emergency mode, then so should we be
         #***********************************************************************
         if is_emergency_enabled(msg.system_status):
+            self.__logdebug("driver reports emergency state: %d" % \
+                    msg.system_status)
             self.uav_mode = srv.SetModeRequest.EMERGENCY
 
         #***********************************************************************
@@ -1132,6 +1132,8 @@ class Controller:
         #***********************************************************************
         elif is_manual_mode_enabled(msg.base_mode,msg.custom_mode):
             self.uav_mode = srv.SetModeRequest.MANUAL
+            self.__logdebug("driver reports manual mode: %d,%d" % \
+                    (msg.base_mode, msg.custom_mode) )
 
         #***********************************************************************
         #   Anything else we currently count as auto. In the case of
@@ -1141,6 +1143,8 @@ class Controller:
         #***********************************************************************
         else:
             self.uav_mode = srv.SetModeRequest.AUTO
+            self.__logdebug("driver reports auto mode: %d,%d" % \
+                    (msg.base_mode, msg.custom_mode) )
 
 
     def driver_state_cb(self,msg):
@@ -1351,6 +1355,7 @@ class Controller:
             # if we get that far, return error status from driver
             if SUCCESS_ERR == response.status:
                 self.uav_mode = msg.Mode.MANUAL
+                self.__loginfo("Now in manual mode.")
             else:
                 self.__logerr("Drone failed to enter manual mode")
             return response.status

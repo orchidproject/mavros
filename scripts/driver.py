@@ -621,54 +621,16 @@ class MavRosProxy:
         #   Execute Takeoff
         #**********************************************************************
         if req.command == mavros.srv.MAVCommandRequest.CMD_TAKEOFF:
-            if "LAND" not in self.connection.mode_mapping().keys():
-                rospy.logwarn("[MAVROS:%s]This vehicle can not fly." %
-                              self.uav_name)
-                return UNSUPPORTED_COMMAND_ERR
-            if self.state.custom_mode != self.connection.mode_mapping()["LAND"]:
-                rospy.loginfo("[MAVROS:%s]Already in TAKEOFF" % self.uav_name)
-                return SUCCESS_ERR
-
             self.connection.mav.command_long_send(self.connection.target_system,
-                                                  0, mav.MAV_CMD_NAV_TAKEOFF,
-                                                  0, 0, 0, 0, 0, 0, 0, 0)
-
-            rospy.sleep(BUSY_WAIT_INTERVAL)
-            while self.state.custom_mode == \
-                  self.connection.mode_mapping()["LAND"]:
-                if rospy.Time.now() - start_time > self.command_timeout:
-                    rospy.logerr(
-                        "[MAVROS:%s]Timeout while trying to takeoff..." %
-                        self.uav_name + str(self.state.custom_mode))
-                    return MAV_TIMEOUT_ERR
-                rospy.sleep(BUSY_WAIT_INTERVAL)
-            rospy.loginfo("[MAVROS:%s]Taken off" % self.uav_name)
+                0, mav.MAV_CMD_NAV_TAKEOFF, 0, 0, 0, 0, 0, 0, 0, 0)
             return SUCCESS_ERR
 
         #**********************************************************************
         #   Execute Land
         #**********************************************************************
         elif req.command == mavros.srv.MAVCommandRequest.CMD_LAND:
-            if "LAND" not in self.connection.mode_mapping().keys():
-                rospy.logwarn("[MAVROS:%s]This vehicle can not fly." %
-                              self.uav_name)
-                return UNSUPPORTED_COMMAND_ERR
-            if self.state.custom_mode == self.connection.mode_mapping()["LAND"]:
-                rospy.loginfo("[MAVROS:%s]Already in LANDED" % self.uav_name)
-                return SUCCESS_ERR
             self.connection.mav.command_long_send(self.connection.target_system,
-                                                  0, mav.MAV_CMD_NAV_LAND,
-                                                  0, 0, 0, 0, 0, 0, 0, 0)
-            rospy.sleep(BUSY_WAIT_INTERVAL)
-            while self.state.custom_mode != \
-                  self.connection.mode_mapping()["LAND"]:
-                if rospy.Time.now() - start_time > self.command_timeout:
-                    rospy.logwarn(
-                        "[MAVROS:%s]Timeout while trying to land..." %
-                        self.uav_name + str(self.state.custom_mode))
-                    return MAV_TIMEOUT_ERR
-                rospy.sleep(BUSY_WAIT_INTERVAL)
-            rospy.loginfo("[MAVROS:%s]Landed" % self.uav_name)
+                0, mav.MAV_CMD_NAV_LAND, 0, 0, 0, 0, 0, 0, 0, 0)
             return SUCCESS_ERR
 
         #**********************************************************************
@@ -1418,10 +1380,11 @@ class MavRosProxy:
                 self.pub_filtered_pos.publish(self.filtered_pos_msg)
 
             elif msg_type == "MISSION_CURRENT":
+                if msg.seq != self.state.current_waypoint:
+                    rospy.loginfo("[MAVROS:%s] New mission reported: %d" % \
+                        (self.uav_name, msg.seq))
                 self.state.current_waypoint = msg.seq
                 self.last_current_wp_report_time = rospy.Time.now()
-                rospy.loginfo("[MAVROS:%s] Current mission reported: %d" % \
-                              (self.uav_name, msg.seq))
 
             elif msg_type == "MISSION_ITEM":
                 self.handle_waypoint_from_mav(msg)

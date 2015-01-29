@@ -13,6 +13,7 @@ from mavutil import mavlink
 # Adhoc manual mode - apparently used to request manual control of MAVs that
 # might not support manual mode
 #******************************************************************************
+ADHOC_MANUAL_BASE_MODE = 65
 ADHOC_MANUAL = 99
 
 #******************************************************************************
@@ -67,7 +68,9 @@ BASE_MODE_NAME = dict( zip(BASE_MODE_VALUE.values(), BASE_MODE_VALUE.keys()) )
 
 def get_base_mode_name(mode_id):
     """Returns meaningful name for system base mode"""
-    if mode_id in BASE_MODE_NAME:
+    if mode_id==ADHOC_MANUAL_BASE_MODE:
+       return "CUSTOM_MANUAL"
+    elif mode_id in BASE_MODE_NAME:
        return BASE_MODE_NAME[mode_id]
     else:
        return "Unknown mode: %d" % mode_id
