@@ -503,9 +503,10 @@ class Controller:
         #   Ensure we're a safe distance from our current position
         #**********************************************************************
         safe_distance = self.drone_params[SAFE_FLIGHT_ZONE_RADIUS_PARAM]
-        if safe_distance < total_distance(self.current_position,waypoint):
-            self.__logerr("waypoint %s is too far from current position" %
-                    waypoint)
+        total_dist = total_distance(self.current_position,waypoint)
+        if safe_distance < total_dist:
+            self.__logerr("waypoint %s is too far from current position: "
+                    " %f >= %f" % (waypoint, total_dist, safe_distance) )
             return False
 
         #**********************************************************************
@@ -1745,15 +1746,17 @@ class Controller:
         self.waypoint_queue.extend(req.waypoints)
 
         #***********************************************************************
-        #   If we're in AUTO mode, sync them with the drone now
+        #   If the queue is active, sync them with the drone now
         #   Otherwise, they'll be synced when we next resume the queue in 
         #   AUTO mode.
         #***********************************************************************
-        status = self.__set_waypoints_from_queue()
-        if SUCCESS_ERR != status:
-            self.__logerr("Failed to add and sync waypoints with drone")
+        if (not self.queue_is_paused) and self.uav_mode == msg.Mode.AUTO:
+            status = self.__set_waypoints_from_queue()
+            if SUCCESS_ERR != status:
+                self.__logerr("Failed to add and sync waypoints with drone")
+                return status
 
-        return status
+        return SUCCESS_ERR
 
     def add_sweep_cb(self,req):
         """Callback for adding a set of waypoints to the queue
