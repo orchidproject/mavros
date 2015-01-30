@@ -1153,7 +1153,7 @@ class Controller:
 
            Used to figure out when waypoints have been completed. Ideally this
            would actually be achieved used mavlink MISSION_REACHED messages,
-           but its not clear if the AR.Drone actually sends these.
+           but reception is not guarranteed.
 
            Also ensures that the UAV mode (AUTO/MANUAL/EMERGENCY) is up-to-date
         """
@@ -1163,6 +1163,35 @@ class Controller:
         #   is in line with what the UAV is reporting.
         #***********************************************************************
         self.update_uav_mode(msg)
+
+        #***********************************************************************
+        #   Figuring out when we're done is a messy business.
+        #   Ideally, we will get "WAYPOINT_REACHED" from drone, but reception
+        #   is not guarranteed.
+        #
+        #   Going of the current waypoint number is all good, but assumes
+        #   queue state is currently in sync with drone and executing ---
+        #   difficult to test for & might require locking the queue during
+        #   sync. Also, unclear what happens when the last waypoint is reached.
+        #   does the current waypoint reset to zero?
+        #
+        #   For now, are only use case is that the queue is explicitly cleared
+        #   after each execution, so lets not bother with automatic dequeueing
+        #   for now. If this changes, the code should either go here, or 
+        #   be conditioned of a separate waypoint_reached topic.
+        #***********************************************************************
+        self.update_queue_state(msg)
+
+    def update_queue_state(self,msg):
+        """Update queue state from driver state message.
+
+           Used to figure out when waypoints have been completed. Ideally this
+           would actually be achieved used mavlink MISSION_REACHED messages,
+           but reception is not guarranteed.
+
+           THIS FUNCTION IS NOT CURRENTLY USED - and may be deprecated in
+           favour of a more reliable update policy in the future.
+        """
 
         #***********************************************************************
         #   Calculate number of waypoints completed since last state message
@@ -1589,7 +1618,8 @@ class Controller:
         if SUCCESS_ERR != status:
             self.queue_is_paused = True
             self.__logerr("Could not execute mission on drone. Pausing Queue.")
-        self.__loginfo("Queue resumed.")
+        else:
+            self.__loginfo("Queue resumed.")
         return status
 
     def land_cb(self,req=None):
