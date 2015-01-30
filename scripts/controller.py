@@ -1180,7 +1180,9 @@ class Controller:
         #   for now. If this changes, the code should either go here, or 
         #   be conditioned of a separate waypoint_reached topic.
         #***********************************************************************
-        self.update_queue_state(msg)
+        #self.update_queue_state(msg)
+        # Just update current waypoint for diagnostics purposes for now
+        self.current_waypoint = msg.current_waypoint 
 
     def update_queue_state(self,msg):
         """Update queue state from driver state message.
