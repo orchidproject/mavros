@@ -131,7 +131,8 @@ MAV_ERR_STATUS = 1
 
 class MavRosProxy:
     def __init__(self, name, device, baudrate, source_system=255,
-                 command_timeout=5, altitude_min=1, altitude_max=5):
+                 command_timeout=30, resend_timeout=3, altitude_min=1,
+                 altitude_max=5):
 
         #**********************************************************************
         #   Name of UAV we're communicating with
@@ -151,6 +152,7 @@ class MavRosProxy:
         self.baudrate = baudrate
         self.source_system = source_system
         self.command_timeout = rospy.Duration(secs=command_timeout)
+        self.resend_timeout = rospy.Duration(secs=resend_timeout)
         self.connection = None
 
         #**********************************************************************
@@ -161,6 +163,7 @@ class MavRosProxy:
         self.last_wp_ack_result = -1 
         self.last_wp_ack_time = rospy.Time.now()
         self.last_wp_request_time = rospy.Time.now()
+        self.last_valid_wp_received_time = rospy.Time.now()
         self.last_current_wp_report_time = rospy.Time.now()
 
         #**********************************************************************
@@ -843,18 +846,40 @@ class MavRosProxy:
         #**********************************************************************
         #   Send request for waypoints to MAV
         #**********************************************************************
-        start_time = rospy.Time.now()   # important we record this b4 request
         self.connection.waypoint_request_list_send()
 
         #**********************************************************************
         #   Wait for waypoints to get in sync again
+        #   Note we reinitialise the last_valid_wp_received_time to avoid
+        #   timing out immediately based on the timestamp from any previous
+        #   request.
         #**********************************************************************
+        self.last_valid_wp_received_time = rospy.Time.now()
         while not all(self.waypoints_synced_with_mav):
             rospy.sleep(BUSY_WAIT_INTERVAL)
-            if rospy.Time.now() - start_time > self.command_timeout:
+
+            #******************************************************************
+            #   Give up after long time out
+            #******************************************************************
+            if rospy.Time.now() - self.last_valid_wp_received_time > \
+                self.command_timeout:
                 rospy.logerr("[MAVROS:%s]Time out waiting for mav to "
                               "send all waypoints" % self.uav_name)
                 return [], MAV_TIMEOUT_ERR
+
+            #******************************************************************
+            #   Resend request after short time out
+            #******************************************************************
+            if rospy.Time.now() - self.last_valid_wp_received_time > \
+                self.resend_timeout:
+
+                # list.index(X) returns first occurrence of X
+                next_waypoint_id = self.waypoints_synced_with_mav.index(False)
+
+                rospy.loginfo("[MAVROS:%s] Requesting waypoint %d again" % \
+                              (self.uav_name, next_waypoint_id) )
+
+                self.connection.waypoint_request_send(next_waypoint_id)
 
         #**********************************************************************
         #   If we get this far, return waypoints successfully
@@ -961,6 +986,12 @@ class MavRosProxy:
 
         self.current_waypoints[msg.seq] = waypoint
         self.waypoints_synced_with_mav[msg.seq] = True
+
+        #**********************************************************************
+        #  Up date timestamp for last valid received waypoint
+        #  (Used to decide if request has timed out)
+        #**********************************************************************
+        self.last_valid_wp_received_time = rospy.Time.now()
 
         #**********************************************************************
         #   If everything is now in sync, acknowledge receipt of all waypoints
@@ -1111,13 +1142,18 @@ class MavRosProxy:
         #**********************************************************************
         # Tell MAV how many waypoints we're about to send, and wait for it
         # to start requesting all waypoints
+        #
+        # Note we reinitialise the last_wp_request_time to avoid
+        # timing out immediately based on the timestamp from any previous
+        # call to this function.
         #**********************************************************************
-        start_time = rospy.Time.now()  # to be safe set before count_send
+        self.last_wp_request_time = rospy.Time.now()
         rospy.logdebug("sending waypoint count: %d" % len(req.waypoints))
         self.connection.waypoint_count_send(len(req.waypoints))
         while not all(self.waypoints_synced_with_mav):
             rospy.sleep(BUSY_WAIT_INTERVAL)
-            if rospy.Time.now() - start_time > self.command_timeout:
+            if rospy.Time.now() - self.last_wp_request_time > \
+                self.command_timeout:
                 rospy.logerr("[MAVROS:%s]Time out waiting for mav to "
                               "request all waypoints" % self.uav_name)
                 return MAV_TIMEOUT_ERR
@@ -1126,6 +1162,7 @@ class MavRosProxy:
         #   Wait for MAV to acknowledge receipt of all waypoints, before
         #   updating count of waypoints on MAV
         #**********************************************************************
+        start_time = rospy.Time.now() 
         status = self.wait_for_wp_ack(start_time)
         if SUCCESS_ERR == status:
             self.state.num_of_waypoints = len(self.current_waypoints)
@@ -1452,7 +1489,9 @@ parser.add_option("-d", "--device", dest="device", default="udp:192.168.1.2:1455
 parser.add_option("-s", "--source-system", dest='source_system', type='int',
                   default=255, help='MAVLink source system for this node')
 parser.add_option("-t", "--command-timeout", dest='command_timeout', type='int',
-                  default=5, help='Timeout for waiting for commands accomplishment.')
+                  default=30, help='Timeout for waiting for commands accomplishment.')
+parser.add_option("--resend", "--resend-timeout", dest='resend_timeout', type='int',
+                  default=3, help='Time to wait for response from mav before resending request.')
 parser.add_option("--mina", "--minimum-altitude", dest="minimum_altitude", default=1,
                   type='int', help="Minimum altitude waypoints must have to be accepted (meters)")
 parser.add_option("--maxa", "--maximum-altitude", dest="maximum_altitude", default=5,
@@ -1473,7 +1512,7 @@ if __name__ == '__main__':
         if opts.device:
             rospy.init_node("mavros_driver")
             mav_proxy = MavRosProxy(opts.name, opts.device, opts.baudrate, opts.source_system, opts.command_timeout,
-                        opts.minimum_altitude, opts.maximum_altitude)
+                        opts.resend_timeout, opts.minimum_altitude, opts.maximum_altitude)
             mav_proxy.start()
     except rospy.ROSInterruptException:
         rospy.loginfo("%s exiting normally." % rospy.get_name())
