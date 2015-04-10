@@ -49,6 +49,7 @@
 
     /uav_name/state - state information published by driver about drone
     /uav_name/filtered_pos - current GPS position published by driver
+    /uav_name/control/emergency - tell UAV to enter emergency mode
 
     The following are used to issue commands to all UAVs at once, but
     not response or acknowledgement is given in response.
@@ -924,6 +925,9 @@ class Controller:
 
         rospy.Subscriber(MULTI_UAV_CONTROL_PREFIX + "land", EmptyMsg,
             self.land_cb)
+
+        rospy.Subscriber(self.control_prefix + "emergency",
+            EmptyMsg, self.emergency_cb)
 
         rospy.Subscriber(MULTI_UAV_CONTROL_PREFIX + "emergency",
             EmptyMsg, self.emergency_cb)
