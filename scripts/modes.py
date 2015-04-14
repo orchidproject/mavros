@@ -39,6 +39,20 @@ def get_system_status_name(system_state_id):
     else:
        return "Unknown state: %d" % system_state_id
 
+def is_system_status_active(system_state_id):
+    """Returns true iff system state is active"""
+    if system_state_id == mavlink.MAV_STATE_ACTIVE:
+       return True
+    else:
+       return False
+
+def is_system_status_standby(system_state_id):
+    """Returns true iff system state is standby"""
+    if system_state_id == mavlink.MAV_STATE_STANDBY:
+       return True
+    else:
+       return False
+
 def is_emergency_enabled(system_state_id):
     """Returns true of the system is in emergency mode
     """

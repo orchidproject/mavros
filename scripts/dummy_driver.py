@@ -151,12 +151,16 @@ class MavRosProxy:
         self.params = {}  # UAV mavlink parameters - initially none defined
         self.queue_paused = True
 
+        # High-level simulated state
+        self.auto_mode_enabled = True
+        self.landed = True
+
         # Simulated UAV state
         self.state = mavros.msg.State()
         self.state.base_mode = 0
         self.state.custom_mode = 0
         self.state.current_waypoint = 0
-        self.state.system_status = 0
+        self.state.system_status = SYSTEM_STATES["STANDBY"]
         self.state.num_of_waypoints = 0
 
         # Simulated UAV position
@@ -166,6 +170,16 @@ class MavRosProxy:
         self.pos.longitude = -2.0
         self.pos.altitude = 1.0
         self.pos.relative_altitude = 1.0
+
+        #**********************************************************************
+        #   ROS Diagnostics Updater
+        #**********************************************************************
+        self.diag_updater = diagnostic_updater.Updater()
+        self.diag_updater.setHardwareID("%s" % self.uav_name)
+        self.diag_updater.add("state",self.state_diagnostics_cb)
+        #self.diag_updater.add("gps",self.gps_diagnostics_cb)
+        #self.diag_updater.add("battery",self.battery_diagnostics_cb)
+        #self.diag_updater.add("mission",self.mission_diagnostics_cb)
 
         #**********************************************************************
         # Register ROS Publications
@@ -194,6 +208,61 @@ class MavRosProxy:
         #**********************************************************************
         rospy.Subscriber(self.uav_name + "/manual_control", mavros.msg.RC,
                          self.manual_control_cb)
+
+
+    def update_diagnostics(self, event):
+        """Callback for updating diagnostics"""
+        self.diag_updater.update()
+
+    def state_diagnostics_cb(self, status):
+        """Callback for filling in ROS diagnostic messages
+           Parameters
+           status - DiagnosticStatusWrapper used to fill in current next
+           status message
+
+           Returns updated status
+        """
+
+        #**********************************************************************
+        #   Convenience reference to base and custom modes
+        #**********************************************************************
+        base_mode = self.state.base_mode
+        custom_mode = self.state.custom_mode
+        base_mode_name = get_base_mode_name(base_mode)
+        status.summary(DIAG_OK, base_mode_name)
+
+        #**********************************************************************
+        #   Report useful state variables
+        #   To do: make custom mode name generic
+        #**********************************************************************
+        custom_mode_name = get_custom_mode_name("ARDrone", custom_mode)
+        system_status_name = get_system_status_name(self.state.system_status)
+        status.add("base mode", base_mode_name)
+        status.add("custom mode", custom_mode_name)
+        status.add("MAV system status", system_status_name)
+
+        #**********************************************************************
+        #   Specify explicitly which mode flags are set
+        #**********************************************************************
+        preflight_enabled = is_preflight_mode_enabled(base_mode,custom_mode)
+        custom_enabled = is_custom_mode_enabled(base_mode,custom_mode)
+        auto_enabled = is_auto_mode_enabled(base_mode,custom_mode)
+        guided_enabled = is_guided_mode_enabled(base_mode,custom_mode)
+        stabilize_enabled = is_stabilize_mode_enabled(base_mode,custom_mode)
+        hil_enabled = is_hil_mode_enabled(base_mode,custom_mode)
+        manual_enabled = is_manual_mode_enabled(base_mode,custom_mode)
+        safety_enabled = is_safety_mode_enabled(base_mode,custom_mode)
+
+        status.add("preflight_enabled",preflight_enabled)
+        status.add("custom_enabled",custom_enabled)
+        status.add("auto_enabled",auto_enabled)
+        status.add("guided_enabled",guided_enabled)
+        status.add("stabilize_enabled",stabilize_enabled)
+        status.add("hil_enabled",hil_enabled)
+        status.add("manual_enabled",manual_enabled)
+        status.add("safety_enabled",safety_enabled)
+
+        return status
 
     def manual_control_cb(self, req):
         '''Callback for Manual Remote Control Inputs
@@ -262,15 +331,28 @@ class MavRosProxy:
         result.status = SUCCESS_ERR
         return result
 
+    def toggle_queue(self):
+        """Toggles queue from paused to active"""
+
+        self.queue_paused = not self.queue_paused
+        if self.auto_mode_enabled and not self.landed:
+            if self.queue_paused:
+                self.state.base_mode = 92
+                self.state.system_status = SYSTEM_STATES["STANDBY"]
+            else:
+                self.state.base_mode = 88
+                self.state.system_status = SYSTEM_STATES["ACTIVE"]
+
     def toggle_emergency(self):
         """Toggles the emergency state between ON and OFF
 
            This simulates behaviour of AR.DRONE
         """
         if SYSTEM_STATES["EMERGENCY"]==self.state.system_status:
-            self.state.system_status = 0
+            self.state.system_status = SYSTEM_STATES["STANDBY"]
         else:
             self.state.system_status = SYSTEM_STATES["EMERGENCY"]
+            self.landed = True
 
     def mav_command_cb(self, req):
         """Callback for sending MAV commands
@@ -288,8 +370,21 @@ class MavRosProxy:
         #**********************************************************************
         if req.command == mavros.srv.MAVCommandRequest.CMD_TAKEOFF:
             rospy.loginfo("[MAVROS:%s]Takeoff" % self.uav_name)
+            if self.state.system_status == SYSTEM_STATES["EMERGENCY"]:
+                return SUCCESS_ERR
+
             self.pos.altitude = 1.0  # AR.Drone reports this when on ground
             self.pos.relative_altitude = 1.0
+            self.landed = False
+
+            if self.auto_mode_enabled:
+                if self.queue_paused:
+                    self.state.base_mode = 92
+                    self.state.system_status = SYSTEM_STATES["STANDBY"]
+                else:
+                    self.state.base_mode = 88
+                    self.state.system_status = SYSTEM_STATES["ACTIVE"]
+
             return SUCCESS_ERR
 
         #**********************************************************************
@@ -297,24 +392,31 @@ class MavRosProxy:
         #**********************************************************************
         elif req.command == mavros.srv.MAVCommandRequest.CMD_LAND:
             rospy.loginfo("[MAVROS:%s]Landing" % self.uav_name)
-            self.pos.altitude = 0.4  # AR.Drone reports this when on ground
-            self.pos.relative_altitude = 0.4
+            self.landed = True
+            self.pos.altitude = 0.241  # AR.Drone reports this when on ground
+            self.pos.relative_altitude = 0.241
+            if self.auto_mode_enabled:
+                self.state.base_mode = 0
+                self.state.custom_mode = 0
+                self.state.system_status = SYSTEM_STATES["STANDBY"]
             return SUCCESS_ERR
 
         #**********************************************************************
-        #   Halt at current position
+        #   Halt at current position (Implemented on real drone as toggle,
+        #   so we do the same here).
         #**********************************************************************
         elif req.command == mavros.srv.MAVCommandRequest.CMD_HALT:
             rospy.loginfo("[MAVROS:%s]Halting" % self.uav_name)
-            self.queue_paused = True
+            self.toggle_queue()
             return SUCCESS_ERR
 
         #**********************************************************************
-        #   Resume waypoints after halt
+        #   Resume waypoints after halt. (Implemented on real drone as toggle
+        #   so we do the same here.)
         #**********************************************************************
         elif req.command == mavros.srv.MAVCommandRequest.CMD_RESUME:
             rospy.loginfo("[MAVROS:%s]Resuming" % self.uav_name)
-            self.queue_paused = False
+            self.toggle_queue()
             return SUCCESS_ERR
 
         #**********************************************************************
@@ -335,6 +437,7 @@ class MavRosProxy:
         elif req.command == mavros.srv.MAVCommandRequest.CMD_MANUAL:
             self.state.base_mode = mav.MAV_MODE_FLAG_CUSTOM_MODE_ENABLED
             self.state.custom_mode = ADHOC_MANUAL
+            self.auto_mode_enabled = False
             rospy.loginfo("[MAVROS:%s]Now in manual" % self.uav_name)
             return SUCCESS_ERR
 
@@ -342,8 +445,25 @@ class MavRosProxy:
         #   Change mode to auto
         #**********************************************************************
         elif req.command == mavros.srv.MAVCommandRequest.CMD_AUTO:
-            self.state.base_mode = 0
             self.state.custom_mode = 0
+            self.auto_mode_enabled = True
+
+            if SYSTEM_STATES["EMERGENCY"]==self.state.system_status:
+                self.state.base_mode = 0
+
+            elif self.landed:
+                self.state.base_mode = 0
+                self.status.system_status = SYSTEM_STATES["STANDBY"]
+
+            elif self.paused:
+                self.state.base_mode = 92
+                self.status.system_status = SYSTEM_STATES["STANDBY"]
+
+            else:
+                self.state.base_mode = 88
+                self.status.system_status = SYSTEM_STATES["ACTIVE"]
+                
+
             rospy.loginfo("[MAVROS:%s]Now in auto" % self.uav_name)
             return SUCCESS_ERR
 
@@ -500,6 +620,11 @@ class MavRosProxy:
         return SUCCESS_ERR
 
     def start(self):
+
+        #**********************************************************************
+        #   Start diagnostics running
+        #**********************************************************************
+        diag_timer = rospy.Timer(DIAG_UPDATE_FREQ,self.update_diagnostics)
 
         #**********************************************************************
         # Register ROS Services

@@ -72,11 +72,16 @@ from uav_utils.sweeps import spiral_sweep, rect_sweep
 import mavros.srv as srv
 import mavros.msg as msg
 from tools import *
-from modes import is_emergency_enabled, is_manual_mode_enabled
+from modes import *
 
 #*******************************************************************************
 #   Constants
 #*******************************************************************************
+
+# Timeout for queue HALT/RESUME commands. If the drone fails to active its
+# queue or go into standby after this amount of time, then we can try to issue
+# the command again.
+QUEUE_STATE_TIMEOUT = rospy.Duration(secs=3.0)
 
 # Frequency with which to broadcast current control mode
 MODE_BROADCAST_FREQ = rospy.Duration(secs=1.0)
@@ -170,6 +175,12 @@ class Controller:
         # if true, waypoints are not being executed and uav_mode is AUTO then
         # the drone is put in a hold pattern, until this becomes false
         self.queue_is_paused = True
+
+        # Time of last queue intervention. This is the time we last sent a
+        # request to the drone to either halt or resume following the queue.
+        # If this is more than QUEUE_STATE_TIMEOUT, then we can try to 
+        # modify the state again.
+        self.last_queue_cmd_time = rospy.Time.now()
 
         # drone's current target waypoint
         self.current_waypoint = 0
@@ -790,6 +801,7 @@ class Controller:
         cmdRequest.custom = srv.MAVCommandRequest.CUSTOM_NO_OP
         try:
             response = self.mav_command_srv(cmdRequest)
+            self.last_queue_cmd_time = rospy.Time.now()
             if SUCCESS_ERR != response.status:
                 self.__logerr("Could not start waypoint following on drone")
             return response.status
@@ -821,6 +833,7 @@ class Controller:
         request.custom = srv.MAVCommandRequest.CUSTOM_NO_OP
         try:
             response = self.mav_command_srv(request)
+            self.last_queue_cmd_time = rospy.Time.now()
             if SUCCESS_ERR != response.status:
                 self.__logerr("Could not halt drone")
             else:
@@ -1155,20 +1168,93 @@ class Controller:
     def driver_state_cb(self,msg):
         """Callback for driver state messages
 
-           Used to figure out when waypoints have been completed. Ideally this
-           would actually be achieved used mavlink MISSION_REACHED messages,
-           but reception is not guarranteed.
-
-           Also ensures that the UAV mode (AUTO/MANUAL/EMERGENCY) is up-to-date
+           Informs the controller of the UAV's current state, waypoint and
+           mode. Takes any appropriate action.
         """
 
-        #***********************************************************************
+        #**********************************************************************
         #   Before dealing with waypoint stuff, make sure the UAV state
         #   is in line with what the UAV is reporting.
-        #***********************************************************************
+        #**********************************************************************
         self.update_uav_mode(msg)
 
-        #***********************************************************************
+        #**********************************************************************
+        #   If the AR.Drone is in guided mode, then we can use the system
+        #   state to verify that the drone's waypoint queue state is 
+        #   consistent with what it ought to be.
+        #**********************************************************************
+        if is_guided_mode_enabled(msg.base_mode,msg.custom_mode):
+
+            #******************************************************************
+            # If we've recently took some action to change the Drone's mode
+            # give it sometime to change its mode, before trying again.
+            #******************************************************************
+            if QUEUE_STATE_TIMEOUT > rospy.Time.now()-self.last_queue_cmd_time:
+                pass
+
+            #******************************************************************
+            # If the drone is active, but the queue is not, then try to put the
+            # drone on standby.
+            #******************************************************************
+            elif is_system_status_active(msg.system_status) and \
+                self.queue_is_paused:
+
+                #**************************************************************
+                #   Try to halt the drone
+                #**************************************************************
+                self.__logwarn("Drone is active, but queue is paused.")
+                request = srv.MAVCommandRequest()
+                request.command = srv.MAVCommandRequest.CMD_HALT
+                request.custom = srv.MAVCommandRequest.CUSTOM_NO_OP
+                try:
+                    response = self.mav_command_srv(request)
+                    self.last_queue_cmd_time = rospy.Time.now()
+                    if SUCCESS_ERR != response.status:
+                        self.__logerr("An Error occurred while halting drone")
+                    else:
+                        self.__loginfo("Request sent to halt drone.")
+                    return response.status
+
+                except rospy.ServiceException as e:
+                    self.__logerr("MAVCommand service threw exception while "
+                            " trying to halt drone: %s" % e)
+
+            #******************************************************************
+            # Conversely, if the drone is on standby, but the queue is active,
+            # then try to activate the drone.
+            #******************************************************************
+            elif is_system_status_standby(msg.system_status) and \
+                not self.queue_is_paused:
+
+                #**************************************************************
+                #   Try to activate the drone
+                #**************************************************************
+                self.__logwarn("Queue is active, but drone on standby.")
+                request = srv.MAVCommandRequest()
+                request.command = srv.MAVCommandRequest.CMD_RESUME
+                request.custom = srv.MAVCommandRequest.CUSTOM_NO_OP
+                try:
+                    response = self.mav_command_srv(request)
+                    self.last_queue_cmd_time = rospy.Time.now()
+                    if SUCCESS_ERR != response.status:
+                        self.__logerr("Error occurred while activating drone")
+                    else:
+                        self.__loginfo("Request sent to activate drone.")
+                    return response.status
+
+                except rospy.ServiceException as e:
+                    self.__logerr("MAVCommand service threw exception while "
+                            " trying to activate drone: %s" % e)
+
+            #******************************************************************
+            # In any other case either the queue state is consistent, or we're
+            # in some other state that we don't understand, so we should leave
+            # things alone.
+            #******************************************************************
+            else:
+                pass
+
+        #**********************************************************************
         #   Figuring out when we're done is a messy business.
         #   Ideally, we will get "WAYPOINT_REACHED" from drone, but reception
         #   is not guarranteed.
@@ -1183,7 +1269,7 @@ class Controller:
         #   after each execution, so lets not bother with automatic dequeueing
         #   for now. If this changes, the code should either go here, or 
         #   be conditioned of a separate waypoint_reached topic.
-        #***********************************************************************
+        #**********************************************************************
         #self.update_queue_state(msg)
         # Just update current waypoint for diagnostics purposes for now
         self.current_waypoint = msg.current_waypoint 

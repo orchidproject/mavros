@@ -643,6 +643,7 @@ class MavRosProxy:
             # self.connection.mav.mission_set_current_send(
             #   self.connection.target_system,
             #   self.connection.target_component, 0)
+            rospy.loginfo("[MAVROS:%s]Executing CMD_HALT" % self.uav_name)
             self.connection.mav.command_long_send(self.connection.target_system,
                                           0, mav.MAV_CMD_OVERRIDE_GOTO,
                                           1, mav.MAV_GOTO_DO_HOLD,
@@ -655,6 +656,7 @@ class MavRosProxy:
         #   Resume waypoints after halt
         #**********************************************************************
         elif req.command == mavros.srv.MAVCommandRequest.CMD_RESUME:
+            rospy.loginfo("[MAVROS:%s]Executing CMD_RESUME" % self.uav_name)
             self.connection.mav.command_long_send(self.connection.target_system,
                                         0,
                                         mav.MAV_CMD_OVERRIDE_GOTO,
