@@ -795,21 +795,29 @@ class Controller:
 
         #**********************************************************************
         #   Try get the drone to resume execution
+        #   Code currently disabled - so that only the main thread
+        #   tries to do this, when drone state is inconsistent.
         #**********************************************************************
-        cmdRequest = srv.MAVCommandRequest()
-        cmdRequest.command = srv.MAVCommandRequest.CMD_RESUME
-        cmdRequest.custom = srv.MAVCommandRequest.CUSTOM_NO_OP
-        try:
-            response = self.mav_command_srv(cmdRequest)
-            self.last_queue_cmd_time = rospy.Time.now()
-            if SUCCESS_ERR != response.status:
-                self.__logerr("Could not start waypoint following on drone")
-            return response.status
+#        cmdRequest = srv.MAVCommandRequest()
+#        cmdRequest.command = srv.MAVCommandRequest.CMD_RESUME
+#        cmdRequest.custom = srv.MAVCommandRequest.CUSTOM_NO_OP
+#        try:
+#            response = self.mav_command_srv(cmdRequest)
+#            self.last_queue_cmd_time = rospy.Time.now()
+#            if SUCCESS_ERR != response.status:
+#                self.__logerr("Could not start waypoint following on drone")
+#            return response.status
+#
+#        except rospy.ServiceException as e:
+#            self.__logerr("MAVCommand service threw exception while trying to"
+#                    " resume waypoint execution: %s" % e)
+#            return SERVICE_CALL_FAILED_ERR
 
-        except rospy.ServiceException as e:
-            self.__logerr("MAVCommand service threw exception while trying to"
-                    " resume waypoint execution: %s" % e)
-            return SERVICE_CALL_FAILED_ERR
+        #**********************************************************************
+        #  If we get this far, return success
+        #**********************************************************************
+        return SUCCESS_ERR
+
             
     def __halt_drone(self):
         """Asks the drone to loiter if in AUTO mode.
@@ -827,23 +835,30 @@ class Controller:
 
         #**********************************************************************
         #   Try to halt the drone and return result status
+        #   Code currently disabled - so that only the main thread
+        #   tries to do this, when drone state is inconsistent.
         #**********************************************************************
-        request = srv.MAVCommandRequest()
-        request.command = srv.MAVCommandRequest.CMD_HALT
-        request.custom = srv.MAVCommandRequest.CUSTOM_NO_OP
-        try:
-            response = self.mav_command_srv(request)
-            self.last_queue_cmd_time = rospy.Time.now()
-            if SUCCESS_ERR != response.status:
-                self.__logerr("Could not halt drone")
-            else:
-                self.__loginfo("Halted drone.")
-            return response.status
+#        request = srv.MAVCommandRequest()
+#        request.command = srv.MAVCommandRequest.CMD_HALT
+#        request.custom = srv.MAVCommandRequest.CUSTOM_NO_OP
+#        try:
+#            response = self.mav_command_srv(request)
+#            self.last_queue_cmd_time = rospy.Time.now()
+#            if SUCCESS_ERR != response.status:
+#                self.__logerr("Could not halt drone")
+#            else:
+#                self.__loginfo("Halted drone.")
+#            return response.status
+#
+#        except rospy.ServiceException as e:
+#            self.__logerr("MAVCommand service threw exception while trying to"
+#                    " halt drone: %s" % e)
+#            return SERVICE_CALL_FAILED_ERR
 
-        except rospy.ServiceException as e:
-            self.__logerr("MAVCommand service threw exception while trying to"
-                    " halt drone: %s" % e)
-            return SERVICE_CALL_FAILED_ERR
+        #**********************************************************************
+        #  If we get this far, return success
+        #**********************************************************************
+        return SUCCESS_ERR
 
     def __ros_init(self):
         """Initialises ROS services, publications and subscriptions"""
